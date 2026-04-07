@@ -1,5 +1,5 @@
 {
-  "name": "socail-media-backend",
+  "name": "social-media-backend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -20,16 +20,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/starxtechteam/socail-media-backend.git"
+    "url": "git+https://github.com/neerajsde/social-media-backend.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/starxtechteam/socail-media-backend/issues"
+    "url": "https://github.com/neerajsde/social-media-backend/issues"
   },
-  "homepage": "https://github.com/starxtechteam/socail-media-backend#readme",
+  "homepage": "https://github.com/neerajsde/social-media-backend#readme",
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1006.0",
     "@aws-sdk/s3-request-presigner": "^3.1006.0",
