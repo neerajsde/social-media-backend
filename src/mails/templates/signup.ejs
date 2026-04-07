@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title><%= appName %> - Verify Your Account</title>
+</head>
+
+<body style="margin:0; padding:0; background-color:#f0f4f8; font-family:Arial, Helvetica, sans-serif;">
+
+  <!-- Wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td align="center" style="padding:40px 10px;">
+
+        <!-- Main Container -->
+        <table width="480" cellpadding="0" cellspacing="0" role="presentation"
+          style="
+            background:#ffffff;
+            border-radius:10px;
+            padding:32px;
+            box-shadow:0 4px 12px rgba(0,0,0,0.08);
+          ">
+
+          <tr>
+            <td align="center">
+
+              <!-- Logo -->
+              <img 
+                src="<%= logoUrl %>"
+                alt="<%= appName %> Logo"
+                width="80"
+                style="margin-bottom:20px; display:block;"
+              />
+
+              <!-- Header -->
+              <h2 style="margin:0 0 10px 0; color:#1f2933;">
+                Welcome to <%= appName %> 🎉
+              </h2>
+
+              <!-- Subtitle -->
+              <p style="margin:0 0 20px 0; font-size:14px; color:#4b5563;">
+                Thanks for signing up! Please verify your email
+                to activate your account.
+              </p>
+
+              <!-- OTP Box (Outlook-safe) -->
+              <table cellpadding="0" cellspacing="0" role="presentation"
+                style="margin:20px auto;">
+                <tr>
+                  <td style="
+                    background:#ecfdf5;
+                    border:1px solid #10b981;
+                    border-radius:6px;
+                    padding:16px 24px;
+                    font-size:30px;
+                    font-weight:bold;
+                    letter-spacing:6px;
+                    color:#047857;
+                    text-align:center;
+                  ">
+                    <%= otp %>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Info -->
+              <p style="margin:16px 0; font-size:13px; color:#374151;">
+                Enter this code in the app to complete your signup.
+                <br />
+                It will expire in
+                <strong><%= expiresIn %> minutes</strong>.
+              </p>
+
+              <!-- Divider -->
+              <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
+
+              <!-- Security Note -->
+              <p style="font-size:12px; color:#6b7280; line-height:1.5; margin:0 0 12px 0;">
+                If you didn’t create an account with
+                <strong><%= appName %></strong>, please ignore this email.
+              </p>
+
+              <p style="font-size:12px; color:#6b7280; line-height:1.5; margin:0;">
+                For your security, never share this code with anyone —
+                our team will never ask for it.
+              </p>
+
+              <!-- Footer -->
+              <p style="margin-top:24px; font-size:12px; color:#9ca3af;">
+                © <%= year %> <%= appName %>. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+        <!-- End Container -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

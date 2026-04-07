@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Welcome to <%= appName %></title>
+</head>
+
+<body style="margin:0; padding:0; background:#f5f7fa; font-family:Arial, sans-serif;">
+
+  <!-- Wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td align="center" style="padding:40px 10px;">
+
+        <!-- Card -->
+        <table width="480" cellpadding="0" cellspacing="0" role="presentation" style="
+            background:#ffffff;
+            border-radius:10px;
+            padding:32px;
+            box-shadow:0 2px 8px rgba(0,0,0,0.06);
+          ">
+
+          <tr>
+            <td align="center">
+
+              <!-- Logo -->
+              <img src="<%= logoUrl %>" alt="<%= appName %> Logo" width="80"
+                style="margin-bottom:20px; display:block;" />
+
+              <!-- Header -->
+              <h2 style="margin:0 0 12px 0; color:#111;">
+                Welcome to <%= appName %>
+              </h2>
+
+              <!-- Greeting -->
+              <p style="margin:0 0 8px 0; color:#555; font-size:14px;">
+                Hi there,
+              </p>
+
+              <!-- Username / ID -->
+              <p style="
+                margin:0 0 16px 0;
+                color:#111;
+                font-size:14px;
+                background:#f1f5ff;
+                padding:10px 14px;
+                border-radius:6px;
+                display:inline-block;
+              ">
+                Your Username:
+                <strong style="color:#2563eb;">
+                  @<%= username %>
+                </strong>
+              </p>
+
+              <!-- Main Message -->
+              <p style="margin:0 0 16px 0; color:#555; font-size:14px; line-height:1.6;">
+                We’re pleased to welcome you to <strong><%= appName %></strong>.
+                Your account has been successfully created and is now ready for use.
+              </p>
+
+              <p style="margin:0 0 16px 0; color:#555; font-size:14px; line-height:1.6;">
+                This username is your unique identity on the platform.
+                You may use it to build your presence and engage with the community.
+              </p>
+
+              <!-- Credentials -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                style="
+                  margin:0 0 20px 0;
+                  background:#fafafa;
+                  border-radius:6px;
+                  padding:14px;
+                  font-size:13px;
+                  color:#555;
+                ">
+                <tr>
+                  <td align="left">
+                    <strong style="color:#111;">Account Details</strong><br /><br />
+                    Username: <strong>@<%= username %></strong><br />
+                    Joined: <%= joinDate %><br />
+                    Status: Active Member
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Features -->
+              <p style="margin:0 0 12px 0; color:#374151; font-size:14px;">
+                Get started by:
+              </p>
+
+              <ul style="
+                padding:0;
+                margin:0 0 20px 0;
+                list-style:none;
+                font-size:13px;
+                color:#555;
+                line-height:1.6;
+              ">
+                <li>Completing your profile</li>
+                <li>Posting your first photo or video</li>
+                <li>Following other users</li>
+                <li>Engaging with posts</li>
+              </ul>
+
+              <!-- CTA Button -->
+              <a href="<%= appUrl %>" style="
+                  display:inline-block;
+                  margin:10px 0 24px 0;
+                  padding:12px 28px;
+                  background:#2563eb;
+                  color:#ffffff;
+                  text-decoration:none;
+                  font-size:14px;
+                  border-radius:6px;
+                  font-weight:600;
+                ">
+                Open <%= appName %>
+              </a>
+
+              <!-- Support -->
+              <p style="margin:0 0 20px 0; font-size:13px; color:#777;">
+                If you need assistance, please contact us at
+                <a href="mailto:<%= supportEmail %>" style="color:#2563eb; text-decoration:none;">
+                  <%= supportEmail %>
+                </a>
+              </p>
+
+              <!-- Divider -->
+              <hr style="margin:24px 0; border:none; border-top:1px solid #eee;" />
+
+              <!-- Footer -->
+              <p style="margin:0 0 6px 0; font-size:12px; color:#999;">
+                You are receiving this email because you registered with <%= appName %>.
+              </p>
+
+              <p style="margin:0; font-size:12px; color:#bbb;">
+                © <%= year %> <%= appName %>. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+        <!-- End Card -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+
+</html>

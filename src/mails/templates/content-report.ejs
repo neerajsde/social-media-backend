@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Content Removal Notice - <%= appName %></title>
+</head>
+
+<body style="margin:0; padding:0; background:#f6f6f6; font-family:Arial, Helvetica, sans-serif;">
+
+  <!-- Wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td align="center" style="padding:40px 12px;">
+
+        <!-- Container -->
+        <table width="520" cellpadding="0" cellspacing="0" role="presentation" style="
+          background:#ffffff;
+          border-radius:8px;
+          padding:32px;
+          border:1px solid #e5e7eb;
+        ">
+
+          <tr>
+            <td align="left">
+
+              <!-- Logo -->
+              <img src="<%= logoUrl %>" alt="<%= appName %>" width="90"
+                style="margin-bottom:24px; display:block;" />
+
+              <!-- Title -->
+              <h2 style="margin:0 0 16px 0; font-size:18px; font-weight:600; color:#111827;">
+                Content Removal Notice
+              </h2>
+
+              <!-- Greeting -->
+              <p style="margin:0 0 12px 0; font-size:14px; color:#374151;">
+                Hello <%= name %>,
+              </p>
+
+              <!-- Main Info -->
+              <p style="margin:0 0 16px 0; font-size:14px; color:#374151; line-height:1.6;">
+                We’re writing to inform you that a video uploaded to your account on 
+                <strong><%= appName %></strong> has been removed following a review of its content.
+              </p>
+
+              <!-- Info Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                style="margin:16px 0; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;">
+                <tr>
+                  <td style="padding:14px; font-size:13px; color:#374151; line-height:1.6;">
+                    <strong style="color:#111827;">Reason for removal</strong><br /><br />
+                    The content was found to be in violation of our Community Guidelines, which prohibit certain types of
+                    sensitive or restricted material.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Post Preview -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                style="margin:16px 0; border:1px solid #e5e7eb; border-radius:6px; overflow:hidden;">
+                
+                <!-- Preview Header -->
+                <tr>
+                  <td style="padding:10px 14px; background:#f3f4f6; font-size:12px; color:#6b7280;">
+                    Removed Content Preview
+                  </td>
+                </tr>
+
+                <!-- Caption -->
+                <tr>
+                  <td style="padding:12px 14px;">
+                    <p style="margin:0; font-size:13px; color:#374151; line-height:1.5;">
+                      <%= caption %>
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+
+              <!-- Explanation -->
+              <p style="margin:0 0 16px 0; font-size:14px; color:#374151; line-height:1.6;">
+                To maintain a safe and trusted environment, content that does not comply with these guidelines may be removed.
+                This decision was made based on automated detection and/or manual review processes.
+              </p>
+
+              <p style="margin:0 0 16px 0; font-size:14px; color:#374151; line-height:1.6;">
+                The removed content is no longer available and cannot be restored.
+              </p>
+
+              <!-- CTA -->
+              <a href="<%= guidelinesUrl %>" style="
+                display:inline-block;
+                margin:12px 0 20px 0;
+                padding:10px 20px;
+                font-size:13px;
+                color:#ffffff;
+                background:#1a73e8;
+                text-decoration:none;
+                border-radius:4px;
+                font-weight:500;
+              ">
+                Review Community Guidelines
+              </a>
+
+              <!-- Appeal -->
+              <p style="margin:0 0 16px 0; font-size:13px; color:#374151; line-height:1.6;">
+                If you believe this action was taken in error, you may contact our support team to request a review.
+              </p>
+
+              <!-- Support -->
+              <p style="margin:0 0 20px 0; font-size:13px; color:#374151;">
+                Support: 
+                <a href="mailto:<%= supportEmail %>" style="color:#1a73e8; text-decoration:none;">
+                  <%= supportEmail %>
+                </a>
+              </p>
+
+              <!-- Divider -->
+              <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
+
+              <!-- Footer -->
+              <p style="margin:0 0 6px 0; font-size:12px; color:#6b7280;">
+                This notification is part of our ongoing efforts to enforce platform policies.
+              </p>
+
+              <p style="margin:0; font-size:12px; color:#9ca3af;">
+                © <%= year %> <%= appName %>. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+        <!-- End Container -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+
+</html>

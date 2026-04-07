@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title><%= appName %> - New Post from <%= authorName %></title>
+</head>
+
+<body style="margin:0; padding:0; background:#f5f7fa; font-family:Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center" style="padding:40px 0;">
+        
+        <table width="480" style="background:#ffffff; border-radius:8px; padding:32px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+          <tr>
+            <td align="center">
+
+              <!-- Header -->
+              <h2 style="margin:0; color:#111;">
+                🌟 New Post Uploaded
+              </h2>
+
+              <!-- Avatar -->
+              <img 
+                src="<%= authorAvatarUrl %>" 
+                alt="<%= authorName %>" 
+                width="64"
+                height="64"
+                style="
+                  margin-top:16px;
+                  border-radius:50%;
+                  object-fit:cover;
+                  display:block;
+                "
+              />
+
+              <!-- Author Name -->
+              <p style="margin:8px 0 0; font-size:15px; font-weight:bold; color:#333;">
+                <%= authorName %>
+              </p>
+
+              <!-- Intro -->
+              <p style="color:#555; font-size:14px; margin-top:16px;">
+                Hi <b><%= followerName %></b>,
+              </p>
+
+              <p style="color:#555; font-size:14px;">
+                <b><%= authorName %></b> just shared a new post on
+                <b><%= appName %></b>.
+              </p>
+
+              <!-- CTA Button -->
+              <a href="<%= postUrl %>" 
+                style="
+                  display:inline-block;
+                  margin:12px 0;
+                  padding:10px 22px;
+                  background:#16a34a;
+                  color:#ffffff;
+                  text-decoration:none;
+                  font-size:14px;
+                  border-radius:6px;
+                ">
+                View Post
+              </a>
+
+              <!-- Time -->
+              <p style="font-size:13px; color:#777; margin-top:16px;">
+                Posted: <b><%= postDate %></b>
+              </p>
+
+              <hr style="margin:24px 0; border:none; border-top:1px solid #eee;" />
+
+              <!-- Info -->
+              <p style="font-size:12px; color:#666; line-height:1.6;">
+                🔔 You’re receiving this because you follow <%= authorName %>.
+              </p>
+
+              <p style="font-size:12px; color:#666;">
+                Manage your notification preferences in app settings.
+              </p>
+
+              <!-- Footer -->
+              <p style="font-size:12px; color:#bbb; margin-top:20px;">
+                © <%= year %> <%= appName %>. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

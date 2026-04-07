@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title><%= appName %> - 2FA Enabled</title>
+</head>
+
+<body style="margin:0; padding:0; background:#f5f7fa; font-family:Arial, sans-serif;">
+
+  <!-- Wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td align="center" style="padding:40px 10px;">
+
+        <!-- Card -->
+        <table width="480" cellpadding="0" cellspacing="0" role="presentation"
+          style="
+            background:#ffffff;
+            border-radius:10px;
+            padding:32px;
+            box-shadow:0 2px 8px rgba(0,0,0,0.06);
+          ">
+
+          <tr>
+            <td align="center">
+
+              <img 
+                src="<%= logoUrl %>"
+                alt="<%= appName %> Logo"
+                width="80"
+                style="margin-bottom:20px; display:block;"
+              />
+
+              <!-- Header -->
+              <h2 style="margin:0 0 12px 0; color:#111;">
+                OTP Login Enabled 🔐
+              </h2>
+
+              <!-- Intro -->
+              <p style="margin:0 0 16px 0; color:#555; font-size:14px; line-height:1.5;">
+                OTP-based login has been successfully enabled
+                for your <strong><%= appName %></strong> account.
+              </p>
+
+              <!-- Info Box -->
+              <table cellpadding="0" cellspacing="0" role="presentation"
+                style="margin:20px auto; width:100%;">
+                <tr>
+                  <td
+                    style="
+                      padding:16px;
+                      background:#f0f6ff;
+                      border:1px solid #c7ddff;
+                      border-radius:6px;
+                      color:#1e40af;
+                      font-size:14px;
+                      text-align:center;
+                      line-height:1.5;
+                    "
+                  >
+                    From now on, you’ll receive a
+                    <strong>one-time password (OTP)</strong>
+                    on your registered email every time you log in.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Details -->
+              <p style="margin:0 0 20px 0; font-size:13px; color:#777; line-height:1.6;">
+                <strong>Enabled on:</strong> <%= enabledAt %><br />
+                <strong>Device:</strong> <%= device %>
+              </p>
+
+              <!-- Divider -->
+              <hr style="margin:24px 0; border:none; border-top:1px solid #eee;" />
+
+              <!-- Security Warning -->
+              <p style="margin:0 0 12px 0; font-size:13px; color:#374151; line-height:1.5;">
+                <strong>Didn’t enable this?</strong><br />
+                Please secure your account immediately by changing
+                your password or contacting our support team.
+              </p>
+
+              <p style="margin:0 0 20px 0; font-size:12px; color:#6b7280; line-height:1.5;">
+                Never share your OTP with anyone.
+                <strong><%= appName %></strong> will never ask for your code.
+              </p>
+
+              <!-- Footer -->
+              <p style="margin:0; font-size:12px; color:#bbb;">
+                © <%= year %> <%= appName %>. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+        <!-- End Card -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

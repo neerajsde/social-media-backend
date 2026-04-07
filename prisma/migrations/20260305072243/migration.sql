@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Comment" ADD COLUMN     "pin" BOOLEAN NOT NULL DEFAULT false,
+ALTER COLUMN "image" DROP NOT NULL;

@@ -1,0 +1,28 @@
+name: socail-media Backend CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Build Project
+        run: npm run build

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>
+    <%= appName %> - Account Successfully Recovered
+  </title>
+</head>
+
+<body style="margin:0; padding:0; background:#f5f7fa; font-family:Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center" style="padding:40px 0;">
+        <table width="480" style="background:#ffffff; border-radius:8px; padding:32px;">
+          <tr>
+            <td align="center">
+
+              <h2 style="margin:0; color:#111;">
+                Account Recovered Successfully ✅
+              </h2>
+
+              <p style="color:#555; font-size:14px; margin-top:12px;">
+                Welcome back! Your <b><%= appName %></b> account has been
+                successfully restored.
+              </p>
+
+              <div style="
+                margin:24px 0;
+                padding:16px;
+                background:#ecfdf5;
+                border-radius:6px;
+                color:#065f46;
+                font-size:14px;
+              ">
+                The account deletion request has been <b>cancelled</b>, and your
+                account is now fully active.
+              </div>
+
+              <p style="font-size:13px; color:#777; margin-top:16px;">
+                Recovered on:<br />
+                <b><%= recoveredAt %> (UTC)</b>
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="
+                margin-top:12px;
+                background:#f9fafb;
+                border-radius:6px;
+                padding:12px;
+                font-size:13px;
+                color:#555;
+              ">
+                <tr>
+                  <td style="padding:4px 0;"><b>Device</b></td>
+                  <td style="padding:4px 0;"><%= device.name %></td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;"><b>Type</b></td>
+                  <td style="padding:4px 0;"><%= device.type %></td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;"><b>Operating System</b></td>
+                  <td style="padding:4px 0;"><%= device.os %></td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;"><b>Browser</b></td>
+                  <td style="padding:4px 0;"><%= device.browser %></td>
+                </tr>
+
+                <% if (device.ip) { %>
+                <tr>
+                  <td style="padding:4px 0;"><b>IP Address</b></td>
+                  <td style="padding:4px 0;"><%= device.ip %></td>
+                </tr>
+                <% } %>
+              </table>
+
+              <hr style="margin:24px 0; border:none; border-top:1px solid #eee;" />
+
+              <p style="font-size:13px; color:#555;">
+                <b>Wasn’t this you?</b><br />
+                If you didn’t recover your account, please secure it immediately
+                by changing your password and contacting our support team.
+              </p>
+
+              <p style="font-size:12px; color:#999;">
+                For your security, we notify you whenever sensitive account
+                actions occur.
+              </p>
+
+              <p style="font-size:12px; color:#bbb;">
+                © <%= year %> <%= appName %>. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>
