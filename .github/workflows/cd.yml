@@ -28,4 +28,4 @@ jobs:
             npx prisma generate
             npx prisma migrate deploy
             npm run build
-            npx pm2 restart social-media-backend || pm2 start dist/server.js --name social-media-backend
+            npx pm2 restart social-backend  || pm2 start dist/server.js --name social-backend
