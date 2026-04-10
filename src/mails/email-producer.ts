@@ -52,7 +52,7 @@ export function sendLoginOtp({ email, otp }: SendOtpEmailProps) {
 export function sendRegisterOTP({ email, otp }: SendOtpEmailProps) {
     return sendMail({
         template: "signup.ejs",
-        subject: "Verify Your socail-media Account",
+        subject: "Verify Your Social Media Account",
         email,
         data: {
             appName: ENV.APP_NAME,
@@ -130,7 +130,7 @@ export function sendChangeEmailOtp({ email, otp }: SendOtpEmailProps) {
 export function sendChangePasswordOtp({ email, otp }: SendOtpEmailProps) {
     return sendMail({
         template: "change-password.ejs",
-        subject: "Reset Your socail-media Password",
+        subject: "Reset Your Social Media Password",
         email,
         data: {
             appName: ENV.APP_NAME,

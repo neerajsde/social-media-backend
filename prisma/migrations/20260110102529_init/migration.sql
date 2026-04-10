@@ -148,7 +148,7 @@ CREATE TABLE "PasswordResetToken" (
 CREATE TABLE "UserTotp" (
     "userId" UUID NOT NULL,
     "secret" TEXT NOT NULL,
-    "issuer" TEXT NOT NULL DEFAULT 'socail-media',
+    "issuer" TEXT NOT NULL DEFAULT 'Stardom',
     "enabled" BOOLEAN NOT NULL DEFAULT false,
     "verifiedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

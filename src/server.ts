@@ -23,7 +23,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     api: {
-      name: "socail-media Backend API",
+      name: "Social Media Backend API",
       version: ENV.API_VERSION,
       status: "running"
     },
@@ -35,7 +35,7 @@ app.get("/", (req, res) => {
       documentation: "/docs",
       health_check: "/health",
     },
-    message: "🚀 Welcome to the socail-media Backend API",
+    message: "🚀 Welcome to the Social Media Backend API",
     timestamp: formattedDate
   });
 });
@@ -46,7 +46,7 @@ app.get("/health", (req, res) => {
 
   res.status(200).json({
     status: "ok",
-    service: "socail-media Backend API",
+    service: "Social Media Backend API",
     version: ENV.API_VERSION,
     uptime: `${Math.floor(uptime)} seconds`,
     timestamp: new Date().toISOString(),

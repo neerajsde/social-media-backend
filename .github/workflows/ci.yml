@@ -1,4 +1,4 @@
-name: socail-media Backend CI
+name: Social Media Backend CI
 
 on:
   pull_request:

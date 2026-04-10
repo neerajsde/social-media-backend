@@ -8,9 +8,13 @@ import {
     activateAdmin,
     approveAdmin, 
     getAdminDetails,
+    listAdmins,
+    updateAdmin,
+    deleteAdmin,
     refreshToken,
     logout,
     logoutAllDevices,
+    getAdminSessions,
 } from "./admin.controller.js";
 
 import { 
@@ -19,6 +23,9 @@ import {
     assignAdminValidation,
     activateAdminValidation,
     approveAdminValidation,
+    listAdminsValidation,
+    updateAdminValidation,
+    deleteAdminValidation,
 } from "./admin.validation.js";
 
 const router = express.Router();
@@ -278,6 +285,7 @@ router.post("/logout", createVerifyToken(["moderator", "admin", "superadmin", "s
  *         description: Invalid admin
  */
 router.post("/logout/all", createVerifyToken(["moderator", "admin", "superadmin", "support"]), logoutAllDevices);
+router.get("/sessions", createVerifyToken(["moderator", "admin", "superadmin", "support"]), getAdminSessions);
 
 router.use(createVerifyToken("superadmin"));
 /**
@@ -388,5 +396,9 @@ router.post("/activate", authRateLimit, activateAdminValidation, activateAdmin);
  *         description: Admin already approved
  */
 router.post("/approve", authRateLimit, approveAdminValidation, approveAdmin);
+
+router.get("/manage", listAdminsValidation, listAdmins);
+router.patch("/manage", authRateLimit, updateAdminValidation, updateAdmin);
+router.delete("/manage", authRateLimit, deleteAdminValidation, deleteAdmin);
 
 export default router;

@@ -131,6 +131,9 @@ model User {
   userActivity UserActivity[]
   searchHistory SearchHistory[]
 
+  @@index([createdAt])
+  @@index([lastSeenAt])
+  @@index([status])
   @@index([id], map: "idx_active_users")
 }
 
@@ -276,7 +279,7 @@ model UserTotp {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   secret String
-  issuer String @default("socail-media")
+  issuer String @default("Stardom")
 
   enabled    Boolean   @default(false)
   verifiedAt DateTime?
@@ -472,7 +475,7 @@ model AdminTotp {
   admin   Admin  @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   secret String
-  issuer String @default("socail-media")
+  issuer String @default("Stardom")
 
   enabled    Boolean   @default(false)
   verifiedAt DateTime?

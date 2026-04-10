@@ -440,6 +440,163 @@ export const getAdminDetails = asyncHandler(async (req, res) => {
   });
 });
 
+export const listAdmins = asyncHandler(async (req, res) => {
+  const adminId = req.session?.userId;
+  if (!adminId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  await requireSuperAdmin(adminId);
+
+  const page = Number(req.query.page ?? 1);
+  const limit = Number(req.query.limit ?? 10);
+  const search = String(req.query.search ?? "").trim();
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const role = req.query.role ? String(req.query.role) : undefined;
+
+  const where: Record<string, unknown> = {
+    id: {
+      not: adminId,
+    },
+    ...(status ? { status } : {}),
+    ...(role ? { role } : {}),
+    ...(search
+      ? {
+          OR: [
+            { user: { username: { contains: search, mode: "insensitive" } } },
+            { user: { email: { contains: search, mode: "insensitive" } } },
+            { user: { first_name: { contains: search, mode: "insensitive" } } },
+            { user: { last_name: { contains: search, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+
+  const skip = (page - 1) * limit;
+
+  const [admins, total] = await Promise.all([
+    prisma.admin.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+            avatarUrl: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.admin.count({ where }),
+  ]);
+
+  return res.status(200).json({
+    success: true,
+    message: "Fetched admins list",
+    admins,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
+});
+
+export const updateAdmin = asyncHandler(async (req, res) => {
+  const adminId = req.session?.userId;
+  const { sourceAdminId, role, status, isApproved, permissions } = req.body;
+
+  if (!adminId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  await requireSuperAdmin(adminId);
+
+  const existingAdmin = await findAdminByIdOrUserId(sourceAdminId);
+  if (!existingAdmin) {
+    throw new ApiError(404, "Admin not found");
+  }
+
+  if (existingAdmin.id === adminId) {
+    throw new ApiError(400, "You cannot update your own admin account");
+  }
+
+  const nextData: Record<string, unknown> = {};
+  if (role !== undefined) nextData.role = role;
+  if (status !== undefined) nextData.status = status;
+  if (isApproved !== undefined) nextData.isApproved = isApproved;
+  if (permissions !== undefined) nextData.permissions = permissions;
+
+  if (Object.keys(nextData).length === 0) {
+    throw new ApiError(400, "No fields provided to update");
+  }
+
+  const updatedAdmin = await prisma.admin.update({
+    where: { id: existingAdmin.id },
+    data: nextData,
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          first_name: true,
+          last_name: true,
+          avatarUrl: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Admin updated successfully",
+    admin: updatedAdmin,
+  });
+});
+
+export const deleteAdmin = asyncHandler(async (req, res) => {
+  const adminId = req.session?.userId;
+  const { sourceAdminId } = req.body;
+
+  if (!adminId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  await requireSuperAdmin(adminId);
+
+  const existingAdmin = await findAdminByIdOrUserId(sourceAdminId);
+  if (!existingAdmin) {
+    throw new ApiError(404, "Admin not found");
+  }
+
+  if (existingAdmin.id === adminId) {
+    throw new ApiError(400, "You cannot delete your own admin account");
+  }
+
+  await prisma.$transaction([
+    prisma.adminSession.deleteMany({ where: { adminId: existingAdmin.id } }),
+    prisma.adminOtp.deleteMany({ where: { adminId: existingAdmin.id } }),
+    prisma.adminTokenHash.deleteMany({ where: { adminId: existingAdmin.id } }),
+    prisma.adminTotp.deleteMany({ where: { adminId: existingAdmin.id } }),
+    prisma.admin.delete({ where: { id: existingAdmin.id } }),
+  ]);
+
+  return res.status(200).json({
+    success: true,
+    message: "Admin deleted successfully",
+  });
+});
+
 export const refreshToken = asyncHandler(async (req, res) => {
   const { token } = req.body;
 
@@ -583,5 +740,51 @@ export const logoutAllDevices = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Logged out from all devices successfully",
+  });
+});
+
+export const getAdminSessions = asyncHandler(async (req, res) => {
+  const session = req.session;
+  const adminId = session?.userId;
+  const currentSessionId = session?.id;
+
+  if (!adminId || !currentSessionId) {
+    throw new ApiError(400, "Invalid request");
+  }
+
+  const admin = await prisma.admin.findUnique({
+    where: { id: adminId },
+    select: { id: true, isApproved: true, status: true },
+  });
+
+  if (!admin || !admin.isApproved || admin.status !== "active") {
+    throw new ApiError(403, "Invalid admin");
+  }
+
+  const sessions = await prisma.adminSession.findMany({
+    where: {
+      adminId,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      deviceName: true,
+      deviceType: true,
+      browser: true,
+      os: true,
+      ipAddress: true,
+      createdAt: true,
+      expiresAt: true,
+    },
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Fetched admin sessions",
+    sessions: sessions.map((item) => ({
+      ...item,
+      isCurrent: item.id === currentSessionId,
+    })),
   });
 });

@@ -1,19 +1,19 @@
-# socail-media Backend: A Guide for Junior Developers
+# Social Media Backend: A Guide for Junior Developers
 
-Welcome to the **socail-media Backend** project! Think of this guide as your map to navigating this codebase. We'll break down how everything works step by step, using simple language and analogies.
+Welcome to the **Social Media Backend** project! Think of this guide as your map to navigating this codebase. We'll break down how everything works step by step, using simple language and analogies.
 
 ---
 
 ## 1. What problem this project solves
 
-Imagine a modern social media platform where creators (Stars) and users interact. The **socail-media Backend** is the engine powering this platform. It handles everything behind the scenes so users can:
+Imagine a modern social media platform where creators (Stars) and users interact. The **Social Media Backend** is the engine powering this platform. It handles everything behind the scenes so users can:
 - Create accounts and log in securely.
 - Post content (text, images, videos, reels).
 - Like, comment, share, and bookmark posts.
 - Follow other users and get notified about activities.
 - Let Admins moderate the platform, manage ads, and oversee premium features.
 
-**Analogy:** If socail-media was a restaurant, the frontend (app/website) is the dining area where customers order. This backend is the **Kitchen**—it receives orders (requests), cooks the meals (processes data), and sends them back out to the customers.
+**Analogy:** If Social Media was a restaurant, the frontend (app/website) is the dining area where customers order. This backend is the **Kitchen**—it receives orders (requests), cooks the meals (processes data), and sends them back out to the customers.
 
 ---
 
@@ -113,7 +113,7 @@ We use a strong **Zero-Trust Session** model using **JWT (JSON Web Tokens)**:
 
 ## 10. Final Summary of the Architecture
 
-The **socail-media Backend** is a highly scalable, modular monolithic application. 
+The **Social Media Backend** is a highly scalable, modular monolithic application. 
 - It uses **Express** for fast HTTP routing and **TypeScript** for reliability.
 - **Prisma + PostgreSQL** acts as the solid foundation for relational data.
 - It prevents bottlenecks by offloading heavy tasks to **BullMQ backend workers**.

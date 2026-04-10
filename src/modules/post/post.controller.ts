@@ -11,6 +11,8 @@ import {
 import { getClientIp } from "../auth/auth.service.js";
 import { verifyFileKey, verifyFileKeys } from "./post.services.js";
 import { addScanVideoJob } from "../../queues/video.queue.js";
+import { redisClient, REDIS_KEYS, deleteByPattern } from "../../config/redis.config.js";
+
 
 export const generatePresignedUrl = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
@@ -819,6 +821,11 @@ export const commentOnPost = asyncHandler(async (req, res) => {
     },
   });
 
+
+  // Invalidate comments cache for this post
+  await deleteByPattern(REDIS_KEYS.postCommentsPattern(postId));
+
+
   return res.status(200).json({
     success: true,
     message: "Comment successfully",
@@ -887,7 +894,11 @@ export const editComment = asyncHandler(async (req, res) => {
     },
   });
 
+  // Invalidate comments cache for this post
+  await deleteByPattern(REDIS_KEYS.postCommentsPattern(comment.postId));
+
   return res.status(200).json({
+
     success: true,
     message: "Comment updated successfully",
     updatedComment,
@@ -947,6 +958,10 @@ export const deleteComment = asyncHandler(async (req, res) => {
   await prisma.comment.delete({
     where: { id: commentId },
   });
+
+  // Invalidate comments cache for this post
+  await deleteByPattern(REDIS_KEYS.postCommentsPattern(postId));
+
 
   return res.status(200).json({
     success: true,
@@ -1019,7 +1034,11 @@ export const replyOnComment = asyncHandler(async (req, res) => {
     },
   });
 
+  // Invalidate comments cache for this post
+  await deleteByPattern(REDIS_KEYS.postCommentsPattern(parentComment.postId));
+
   return res.status(201).json({
+
     success: true,
     message: "Reply added successfully",
     reply,
@@ -1420,5 +1439,266 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       totalPages: Math.ceil(total / limit),
       hasMore: skip + merged.length < total,
     },
+  });
+});
+
+export const getPost = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const { postId } = req.params;
+
+  if (!postId) {
+    throw new ApiError(400, "Post id is required");
+  }
+
+  // Use a user-specific cache key to prevent leaking likes/bookmarks state
+  const cacheKey = `${REDIS_KEYS.postData(postId)}:user:${userId || "public"}`;
+  const cachedPost = await redisClient.get(cacheKey);
+
+  if (cachedPost) {
+    return res.status(200).json({
+      success: true,
+      data: JSON.parse(cachedPost),
+    });
+  }
+
+  const postSelect = {
+    id: true,
+    content: true,
+    postType: true,
+    images: true,
+    likeCount: true,
+    commentCount: true,
+    viewCount: true,
+    visibility: true,
+    status: true,
+    isReply: true,
+    createdAt: true,
+    userId: true,
+    user: {
+      select: {
+        id: true,
+        username: true,
+        avatarUrl: true,
+        isVerified: true,
+        batch: true,
+      },
+    },
+    video: {
+      select: {
+        hlsMasterKey: true,
+        thumbnail: true,
+        durationSec: true,
+        status: true,
+      },
+    },
+    reel: {
+      select: {
+        musicName: true,
+        musicUrl: true,
+        loopEnabled: true,
+      },
+    },
+    ...(userId
+      ? {
+        likes: {
+          where: { userId, isLiked: true },
+          select: { userId: true },
+          take: 1,
+        },
+        bookmarks: {
+          where: { userId },
+          select: { userId: true },
+          take: 1,
+        },
+      }
+      : {
+        likes: { take: 0 },
+        bookmarks: { take: 0 },
+      }),
+    hashtags: {
+      select: { hashtag: { select: { tag: true } } },
+    },
+  } as const;
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { ...postSelect, parentPost: { select: postSelect } },
+  });
+
+  if (!post) {
+    throw new ApiError(404, "Post not found");
+  }
+
+  if (post.status !== "active") {
+    throw new ApiError(400, "Post is not active");
+  }
+
+  let isFollowingAuthor = false;
+  if (userId && post.userId !== userId) {
+    const following = await prisma.follow.findFirst({
+      where: { followerId: userId, followingId: post.userId },
+    });
+    isFollowingAuthor = !!following;
+  } else if (userId && post.userId === userId) {
+    isFollowingAuthor = true;
+  }
+
+  if (post.visibility === "private" && post.userId !== userId) {
+    throw new ApiError(403, "This post is private");
+  }
+
+  if (post.visibility === "followers" && post.userId !== userId && !isFollowingAuthor) {
+    throw new ApiError(403, "You need to follow the user to view this post");
+  }
+
+  const normalizePost = (p: any) => {
+    if (!p) return null;
+    return {
+      ...p,
+      viewCount: Number(p.viewCount),
+      isLiked: p.likes?.length > 0,
+      isBookmarked: p.bookmarks?.length > 0,
+      isOwnPost: p.userId === userId,
+      isFollowingAuthor: p.userId === post.userId ? isFollowingAuthor : false,
+      hashtags: p.hashtags?.map((h: any) => h.hashtag.tag) || [],
+      parentPost: undefined,
+      likes: undefined,
+      bookmarks: undefined,
+    };
+  };
+
+  const formattedPost = {
+    ...normalizePost(post),
+    parentPost: post.postType === "repost" ? normalizePost(post.parentPost) : null,
+  };
+
+  await redisClient.set(cacheKey, JSON.stringify(formattedPost), { EX: 60 * 5 }); // 5 minutes cache
+
+  return res.status(200).json({
+    success: true,
+    data: formattedPost,
+  });
+});
+
+export const getPostComments = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const { postId } = req.params;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  if (!postId) {
+    throw new ApiError(400, "Post id is required");
+  }
+
+  const cacheKey = `${REDIS_KEYS.postComments(postId, page, limit)}:user:${userId || "public"}`;
+  const cachedComments = await redisClient.get(cacheKey);
+
+  if (cachedComments) {
+    return res.status(200).json({
+      success: true,
+      data: JSON.parse(cachedComments),
+    });
+  }
+
+  // Ensure post is active and viewable by user (using the base getPost cache/logic could be an optimization, but we can just check if post exists here or let the user fetch post separately).
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { status: true, visibility: true, userId: true },
+  });
+
+  if (!post || post.status !== "active") {
+    throw new ApiError(404, "Post not found or inactive");
+  }
+
+  let isFollowingAuthor = false;
+  if (userId && post.userId !== userId) {
+    const following = await prisma.follow.findFirst({
+      where: { followerId: userId, followingId: post.userId },
+    });
+    isFollowingAuthor = !!following;
+  } else if (userId && post.userId === userId) {
+    isFollowingAuthor = true;
+  }
+
+  if (post.visibility === "private" && post.userId !== userId) {
+    throw new ApiError(403, "This post is private");
+  }
+
+  if (post.visibility === "followers" && post.userId !== userId && !isFollowingAuthor) {
+    throw new ApiError(403, "You need to follow the user to view this post");
+  }
+
+  const [rawComments, totalComments] = await Promise.all([
+    prisma.comment.findMany({
+      where: {
+        postId,
+        parentId: null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+            isVerified: true,
+            batch: true,
+          },
+        },
+        _count: {
+          select: { replies: true },
+        },
+        ...(userId
+          ? {
+            commentLike: {
+              where: { userId },
+              select: { userId: true },
+              take: 1,
+            },
+          }
+          : {
+            commentLike: { take: 0 },
+          }),
+      },
+      orderBy: [{ pin: "desc" }, { createdAt: "desc" }],
+      skip,
+      take: limit,
+    }),
+    prisma.comment.count({
+      where: {
+        postId,
+        parentId: null,
+      },
+    }),
+  ]);
+
+  const comments = rawComments.map((c) => ({
+    ...c,
+    isLiked: c.commentLike?.length > 0,
+    commentLike: undefined,
+    replyCount: c._count.replies,
+    _count: undefined,
+  }));
+
+
+  const responseData = {
+    comments,
+    pagination: {
+      page,
+      limit,
+      total: totalComments,
+      totalPages: Math.ceil(totalComments / limit),
+      hasMore: skip + comments.length < totalComments,
+    },
+  };
+
+  if (comments.length > 0) {
+    // 1 hour cache
+    await redisClient.set(cacheKey, JSON.stringify(responseData), { EX: 60 * 60 });
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: responseData,
   });
 });

@@ -1,4 +1,4 @@
-name: socail-media Backend Deploy
+name: Social Media Backend Deploy
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd /var/www/socail-media-backend
+            cd /var/www/social-media-backend
 
             export NVM_DIR="$HOME/.nvm"
             source $NVM_DIR/nvm.sh
@@ -28,4 +28,4 @@ jobs:
             npx prisma generate
             npx prisma migrate deploy
             npm run build
-            npx pm2 restart socail-media-backend || pm2 start dist/server.js --name socail-media-backend
+            npx pm2 restart social-media-backend || pm2 start dist/server.js --name social-media-backend

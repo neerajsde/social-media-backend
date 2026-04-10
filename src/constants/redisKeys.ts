@@ -19,9 +19,16 @@ export const REDIS_KEYS = {
   userdata: (userId: string) => `user:profile:${userId}`,
   usernameAvailability: (username: string) => `username:availability:${username}`,
 
-
   // admin data cache
   adminData: (adminId: String) => `admin:${adminId}:data`,
+
+  // post data cache
+  postData: (postId: string) => `post:data:${postId}`,
+  postComments: (postId: string, page: number, limit: number) => `post:comments:${postId}:${page}:${limit}`,
+  postCommentsPattern: (postId: string) => `post:comments:${postId}:*`,
+  // dashboard data cache
+  dashboardStats: () => `dashboard:stats:users`,
+  dashboardGrowth: () => `dashboard:growth:users`,
 };
 
 export const REG_IP_KEY = (ip: string) => `register:ip:${ip}`;

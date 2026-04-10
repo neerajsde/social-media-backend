@@ -66,4 +66,37 @@ const shutdownRedis = async (): Promise<void> => {
 process.on('SIGINT', shutdownRedis);
 process.on('SIGTERM', shutdownRedis);
 
+export async function deleteByPattern(pattern: string): Promise<number> {
+  if (!redisClient.isOpen) {
+    console.warn("⚠️ Redis client is not open, cannot delete by pattern");
+    return 0;
+  }
+
+  let cursor: string = "0";
+  let totalDeleted = 0;
+
+  try {
+    do {
+      const { cursor: nextCursor, keys } = await redisClient.scan(cursor, {
+        MATCH: pattern,
+        COUNT: 100,
+      });
+
+      cursor = nextCursor;
+
+
+      if (keys.length > 0) {
+        const deletedCount = await redisClient.del(keys);
+        totalDeleted += deletedCount;
+      }
+    } while (cursor !== "0");
+
+
+    return totalDeleted;
+  } catch (error) {
+    console.error("❌ Error deleting Redis keys by pattern:", error);
+    return totalDeleted;
+  }
+}
+
 export { redisClient, REDIS_KEYS };

@@ -16,6 +16,8 @@ import {
   sharePostInApp,
   sharePostExternally,
   getFeedPosts,
+  getPost,
+  getPostComments,
 } from "./post.controller.js";
 import {
   createPostValidation,
@@ -800,5 +802,97 @@ router.post('/share-post-externally/:postId', sharePostExternally);
  */
 router.get('/feed', getFeedPosts);
 
+/**
+ * @swagger
+ * /api/v1/post/{postId}:
+ *   get:
+ *     summary: Get a single post
+ *     description: |
+ *       Return a single active post by its ID.
+ *
+ *       Access rules:
+ *       - `public` posts are visible to everyone
+ *       - `private` posts are only visible to the post owner
+ *       - `followers` posts are visible to the owner and followers of the author
+ *
+ *       When the requester is authenticated, the response also includes viewer-specific
+ *       state such as whether the post is liked, bookmarked, owned by the viewer, and
+ *       whether the viewer follows the author.
+ *     tags: [Post]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the post to fetch
+ *     responses:
+ *       200:
+ *         description: Post fetched successfully
+ *       400:
+ *         description: Post ID missing or post is not active
+ *       401:
+ *         description: Unauthorized - missing or invalid token
+ *       403:
+ *         description: The post is private or restricted to followers
+ *       404:
+ *         description: Post not found
+ */
+router.get('/:postId', getPost);
 
+/**
+ * @swagger
+ * /api/v1/post/{postId}/comments:
+ *   get:
+ *     summary: Get comments for a post
+ *     description: |
+ *       Return paginated top-level comments for a single active post.
+ *
+ *       Access follows the same visibility rules as the parent post:
+ *       - `public` posts are visible to everyone
+ *       - `private` posts are only visible to the post owner
+ *       - `followers` posts are visible to the owner and followers of the author
+ *     tags: [Post]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the post whose comments should be fetched
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for comment pagination
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 10
+ *         description: Number of comments to return per page
+ *     responses:
+ *       200:
+ *         description: Comments fetched successfully
+ *       400:
+ *         description: Post ID missing
+ *       401:
+ *         description: Unauthorized - missing or invalid token
+ *       403:
+ *         description: The post is private or restricted to followers
+ *       404:
+ *         description: Post not found or inactive
+ */
+router.get('/:postId/comments', getPostComments);
 export default router;
