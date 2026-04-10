@@ -10,7 +10,7 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
 
-  APP_NAME: z.string().default("socail-media"),
+  APP_NAME: z.string().default("Social Media"),
   API_VERSION: z.string().default("1.0.0"),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),

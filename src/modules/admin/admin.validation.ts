@@ -40,8 +40,31 @@ const adminTargetSchema = z.object({
   sourceAdminId: z.string("Target admin id is required"),
 });
 
+const listAdminsSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  search: z.string().trim().max(100).optional(),
+  status: z.enum(["active", "inactive", "blocked"]).optional(),
+  role: z.enum(["superadmin", "admin", "moderator", "support", "user"]).optional(),
+});
+
+const updateAdminSchema = z.object({
+  sourceAdminId: z.string("Target admin id is required"),
+  role: z.enum(["superadmin", "admin", "moderator", "support", "user"]).optional(),
+  status: z.enum(["active", "inactive", "blocked"]).optional(),
+  isApproved: z.boolean().optional(),
+  permissions: z.array(adminPermissionSchema).optional(),
+});
+
+const deleteAdminSchema = z.object({
+  sourceAdminId: z.string("Target admin id is required"),
+});
+
 export const loginValidation = validationInput(loginSchema);
 export const loginOTPVerificationVal = validationInput(LoginOtpVerify);
 export const assignAdminValidation = validationInput(assignAdminSchema);
 export const activateAdminValidation = validationInput(adminTargetSchema);
 export const approveAdminValidation = validationInput(adminTargetSchema);
+export const listAdminsValidation = validationInput(listAdminsSchema, "query");
+export const updateAdminValidation = validationInput(updateAdminSchema);
+export const deleteAdminValidation = validationInput(deleteAdminSchema);

@@ -5,12 +5,12 @@ const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "socail-media APP API",
+      title: "Social Media APP API",
       version: "1.0.0",
-      description: "Complete REST API documentation for socail-media APP - A social media platform with secure authentication and user management",
+      description: "Complete REST API documentation for Social Media APP - A social media platform with secure authentication and user management",
       contact: {
-        name: "socail-media Team",
-        url: "https://socail-media.ae",
+        name: "Social Media Team",
+        url: "https://Social Media.ae",
       },
     },
     servers: [

@@ -1011,6 +1011,9 @@ export const followUser = asyncHandler(async (req, res) => {
     },
   });
 
+  await redisClient.del(REDIS_KEYS.userdata(followingId));
+  await redisClient.del(REDIS_KEYS.userdata(followerId));
+
   return res.status(200).json({
     success: true,
     message: "User followed successfully",
@@ -1050,6 +1053,9 @@ export const unfollowUser = asyncHandler(async (req, res) => {
       },
     },
   });
+
+  await redisClient.del(REDIS_KEYS.userdata(followingId));
+  await redisClient.del(REDIS_KEYS.userdata(followerId));
 
   return res.status(200).json({
     success: true,

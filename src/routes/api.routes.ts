@@ -6,6 +6,7 @@ import postRoutes from "../modules/post/post.routes.js";
 import activityRoutes from "../modules/activity/activity.routes.js";
 import searchRouter from "../modules/search/search.routes.js";
 import marketPlaceRouter from "../modules/marketplace/marketplace.routers.js";
+import dashboardRoutes from "../modules/dashboard/dashboard.routes.js";
 const router = express.Router();
 
 /**
@@ -43,6 +44,11 @@ const router = express.Router();
  *       - Log post interactions such as views, likes, comments, and shares
  *       - Fetch personal activity history and summary insights
  *       - Inspect aggregated activity stats for a specific post
+ *   - name: Dashboard
+ *     description: |
+ *       Administrative dashboard analytics and user management.
+ *       - Retrieve overall platform statistics and growth trends
+ *       - Manage and filter the complete user database
  */
 
 router.use('/auth', authRoutes);
@@ -52,5 +58,6 @@ router.use('/post', postRoutes);
 router.use('/activity', activityRoutes);
 router.use('/search', searchRouter);
 router.use('/marketPlace', marketPlaceRouter);
+router.use('/dashboard', dashboardRoutes);
 
 export default router;
