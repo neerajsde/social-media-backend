@@ -1046,6 +1046,147 @@ export const replyOnComment = asyncHandler(async (req, res) => {
   });
 });
 
+export const getCommentReplies = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const { commentId } = req.params;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  if (!commentId) {
+    throw new ApiError(400, "Comment id is required");
+  }
+
+  // Check if comment exists
+  const parentComment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      id: true,
+      postId: true,
+      post: {
+        select: {
+          status: true,
+          visibility: true,
+          userId: true,
+        },
+      },
+    },
+  });
+
+  if (!parentComment) {
+    throw new ApiError(404, "Comment not found");
+  }
+
+  if (parentComment.post.status !== "active") {
+    throw new ApiError(404, "Post is not active");
+  }
+
+  // Check post visibility
+  const post = parentComment.post;
+  let isFollowingAuthor = false;
+  if (userId && post.userId !== userId) {
+    const following = await prisma.follow.findFirst({
+      where: { followerId: userId, followingId: post.userId },
+    });
+    isFollowingAuthor = !!following;
+  } else if (userId && post.userId === userId) {
+    isFollowingAuthor = true;
+  }
+
+  if (post.visibility === "private" && post.userId !== userId) {
+    throw new ApiError(403, "This post is private");
+  }
+
+  if (post.visibility === "followers" && post.userId !== userId && !isFollowingAuthor) {
+    throw new ApiError(403, "You need to follow the user to view this post");
+  }
+
+  const cacheKey = `${REDIS_KEYS.commentReplies(commentId, page, limit)}:user:${userId || "public"}`;
+  const cachedReplies = await redisClient.get(cacheKey);
+
+  if (cachedReplies) {
+    return res.status(200).json({
+      success: true,
+      data: JSON.parse(cachedReplies),
+    });
+  }
+
+  const [rawReplies, totalReplies] = await Promise.all([
+    prisma.comment.findMany({
+      where: {
+        parentId: commentId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+            isVerified: true,
+            batch: true,
+          },
+        },
+        _count: {
+          select: {
+            commentLike: true,
+          },
+        },
+        ...(userId
+          ? {
+            commentLike: {
+              where: { userId },
+              select: { userId: true },
+              take: 1,
+            },
+          }
+          : {
+            commentLike: { take: 0 },
+          }),
+      },
+      orderBy: { createdAt: "asc" },
+      skip,
+      take: limit,
+    }),
+    prisma.comment.count({
+      where: {
+        parentId: commentId,
+      },
+    }),
+  ]);
+
+  const replies = rawReplies.map((r) => {
+    const { commentLike, _count, ...rest } = r;
+    return {
+      ...rest,
+      author: r.user,
+      user: undefined,
+      isLiked: commentLike?.length > 0,
+      likesCount: _count?.commentLike || 0,
+    };
+  });
+
+  const responseData = {
+    comments: replies,
+    pagination: {
+      page,
+      limit,
+      total: totalReplies,
+      totalPages: Math.ceil(totalReplies / limit),
+      hasMore: skip + replies.length < totalReplies,
+    },
+  };
+
+  if (replies.length > 0) {
+    // 1 hour cache
+    await redisClient.set(cacheKey, JSON.stringify(responseData), { EX: 60 * 60 });
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: responseData,
+  });
+});
+
 export const likeComment = asyncHandler(async (req, res) => {
   console.log("TOGGLE BUTTON TO LIKE OR DISLIKE COMMENT.");
   const { commentId, postId } = req.params;
@@ -1309,6 +1450,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
     video: {
       select: {
         hlsMasterKey: true,
+        originalVideo: true,
         thumbnail: true,
         durationSec: true,
         status: true,

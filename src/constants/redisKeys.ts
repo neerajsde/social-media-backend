@@ -26,6 +26,7 @@ export const REDIS_KEYS = {
   postData: (postId: string) => `post:data:${postId}`,
   postComments: (postId: string, page: number, limit: number) => `post:comments:${postId}:${page}:${limit}`,
   postCommentsPattern: (postId: string) => `post:comments:${postId}:*`,
+  commentReplies: (commentId: string, page: number, limit: number) => `comment:replies:${commentId}:${page}:${limit}`,
   // dashboard data cache
   dashboardStats: () => `dashboard:stats:users`,
   dashboardGrowth: () => `dashboard:growth:users`,

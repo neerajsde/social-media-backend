@@ -18,6 +18,7 @@ import {
   getFeedPosts,
   getPost,
   getPostComments,
+  getCommentReplies,
   getUserPosts,
 } from "./post.controller.js";
 import {
@@ -38,6 +39,7 @@ router.get("/user/:userId", verifyTokenOptional, getUserPosts);
 router.get("/feed", verifyTokenOptional, getFeedPosts);
 router.get('/:postId', verifyTokenOptional, getPost);
 router.get('/:postId/comments', verifyTokenOptional, getPostComments);
+router.get('/comment/:commentId/replies', verifyTokenOptional, getCommentReplies);
 router.use(createVerifyToken("user"));
 
 /**
