@@ -18,6 +18,7 @@ import {
   getFeedPosts,
   getPost,
   getPostComments,
+  getUserPosts,
 } from "./post.controller.js";
 import {
   createPostValidation,
@@ -801,6 +802,7 @@ router.post('/share-post-externally/:postId', sharePostExternally);
  *         description: Unauthorized - missing or invalid token
  */
 router.get('/feed', getFeedPosts);
+router.get('/user/:userId', getUserPosts);
 
 /**
  * @swagger

@@ -17,6 +17,7 @@ import {
   getFollowers,
   getFollowing,
   isFollowing,
+  publicUserProfile,
 } from "./user.controller.js";
 import { createVerifyToken } from "../../middlewares/auth.js";
 import {
@@ -180,6 +181,7 @@ router.post("/presigned-url", generatePresignedUrl);
  *         description: User not found
  */
 router.get("/profile", userProfile);
+router.get("/profile/:username", publicUserProfile);
 
 /**
  * @swagger
