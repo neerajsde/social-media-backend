@@ -34,34 +34,44 @@ const updateProfileSchema = usernameSchema.extend({
     .string()
     .min(2, { message: "Last name must be at least 2 characters long." })
     .max(50, { message: "Last name must be at most 50 characters long." })
-    .optional(),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   bio: z
     .string()
     .max(160, { message: "Bio must be at most 160 characters long." })
-    .optional(),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
-  avatarUrl: z.url({ message: "Avatar URL must be a valid URL." }).optional(),
+  avatarUrl: z.url({ message: "Avatar URL must be a valid URL." }).optional().nullable().or(z.literal("")),
 
-  bannerUrl: z.url({ message: "Banner URL must be a valid URL." }).optional(),
+  bannerUrl: z.url({ message: "Banner URL must be a valid URL." }).optional().nullable().or(z.literal("")),
 
   gender: z
     .enum(["male", "female", "other"], {
       message: "Gender must be one of: male, female, or other.",
     })
-    .optional(),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   birthdate: z
     .string()
-    .refine((val) => !isNaN(Date.parse(val)), {
+    .refine((val) => !val || !isNaN(Date.parse(val)), {
       message: "Birthdate must be a valid ISO date string.",
     })
-    .optional(),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   location: z
     .string()
     .max(100, { message: "Location must be at most 100 characters long." })
-    .optional(),
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 });
 
 const updateEmail = z.object({
@@ -125,27 +135,43 @@ const urlWithDomain = (domains: string[], message: string) =>
   );
 
 export const updateSocialSchema = z.object({
-  websiteUrl: z.url({ message: "Website URL must be a valid URL." }).optional(),
+  websiteUrl: z
+    .url({ message: "Website URL must be a valid URL." })
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   socialTwitter: urlWithDomain(
     ["twitter.com", "x.com"],
-    "Twitter URL must be from twitter.com or x.com",
-  ).optional(),
+    "Twitter URL must be from twitter.com or x.com"
+  )
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   socialFacebook: urlWithDomain(
     ["facebook.com", "www.facebook.com"],
-    "Facebook URL must be from facebook.com",
-  ).optional(),
+    "Facebook URL must be from facebook.com"
+  )
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   socialLinkedin: urlWithDomain(
     ["linkedin.com", "www.linkedin.com"],
-    "LinkedIn URL must be from linkedin.com",
-  ).optional(),
+    "LinkedIn URL must be from linkedin.com"
+  )
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 
   socialInstagram: urlWithDomain(
     ["instagram.com", "www.instagram.com"],
-    "Instagram URL must be from instagram.com",
-  ).optional(),
+    "Instagram URL must be from instagram.com"
+  )
+    .optional()
+    .nullable()
+    .or(z.literal("")),
 });
 
 const followUserSchema = z.object({

@@ -1702,3 +1702,148 @@ export const getPostComments = asyncHandler(async (req, res) => {
     data: responseData,
   });
 });
+
+export const getUserPosts = asyncHandler(async (req, res) => {
+  const { userId: targetUserId } = req.params;
+  const currentUserId = req.session?.userId;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 20;
+  const skip = (page - 1) * limit;
+
+  if (!targetUserId) {
+    throw new ApiError(400, "User ID is required");
+  }
+
+  if (!currentUserId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  const isOwner = currentUserId === targetUserId;
+
+  let isFollowingRelation = false;
+  if (!isOwner) {
+    const follow = await prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: currentUserId,
+          followingId: targetUserId,
+        },
+      },
+    });
+    isFollowingRelation = !!follow;
+  }
+
+  let visibilityCondition: any = { in: ["public"] };
+  if (isOwner) {
+    visibilityCondition = undefined;
+  } else if (isFollowingRelation) {
+    visibilityCondition = { in: ["public", "followers"] };
+  }
+
+  const postSelect = {
+    id: true,
+    content: true,
+    postType: true,
+    images: true,
+    likeCount: true,
+    commentCount: true,
+    viewCount: true,
+    visibility: true,
+    createdAt: true,
+    userId: true,
+    user: {
+      select: {
+        id: true,
+        username: true,
+        avatarUrl: true,
+        isVerified: true,
+        batch: true,
+      },
+    },
+    video: {
+      select: {
+        hlsMasterKey: true,
+        thumbnail: true,
+        durationSec: true,
+        status: true,
+      },
+    },
+    reel: {
+      select: {
+        musicName: true,
+        musicUrl: true,
+        loopEnabled: true,
+      },
+    },
+    likes: {
+      where: { userId: currentUserId, isLiked: true },
+      select: { userId: true },
+      take: 1,
+    },
+    bookmarks: {
+      where: { userId: currentUserId },
+      select: { userId: true },
+      take: 1,
+    },
+    hashtags: {
+      select: { hashtag: { select: { tag: true } } },
+    },
+  } as const;
+
+  const [posts, totalCount] = await Promise.all([
+    prisma.post.findMany({
+      where: {
+        userId: targetUserId,
+        status: "active",
+        isReply: false,
+        ...(visibilityCondition && { visibility: visibilityCondition }),
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      select: { ...postSelect, parentPost: { select: postSelect } },
+    }),
+    prisma.post.count({
+      where: {
+        userId: targetUserId,
+        status: "active",
+        isReply: false,
+        ...(visibilityCondition && { visibility: visibilityCondition }),
+      },
+    }),
+  ]);
+
+  const following = await prisma.follow.findMany({
+    where: { followerId: currentUserId },
+    select: { followingId: true },
+  });
+  const followingSet = new Set(following.map((f) => f.followingId));
+
+  const normalizePost = (post: any) => {
+    if (!post) return null;
+    return {
+      ...post,
+      viewCount: Number(post.viewCount),
+      isLiked: post.likes.length > 0,
+      isBookmarked: post.bookmarks.length > 0,
+      isOwnPost: post.userId === currentUserId,
+      isFollowingAuthor: followingSet.has(post.userId),
+      hashtags: post.hashtags.map((h: any) => h.hashtag.tag),
+      parentPost: post.parentPost ? normalizePost(post.parentPost) : undefined,
+    };
+  };
+
+  const formattedPosts = posts.map(normalizePost);
+
+  res.status(200).json({
+    success: true,
+    message: "User posts fetched successfully",
+    posts: formattedPosts,
+    meta: {
+      page,
+      limit,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+    },
+  });
+});

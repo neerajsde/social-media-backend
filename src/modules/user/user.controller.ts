@@ -401,26 +401,26 @@ export const userProfileUpdate = asyncHandler(async (req, res) => {
     where: { id: userId },
     data: {
       ...(username && { username }),
-      ...(first_name && { first_name }),
-      ...(last_name && { last_name }),
-      ...(bio && { bio }),
-      ...(avatarUrl && { avatarUrl }),
-      ...(bannerUrl && { bannerUrl }),
+      ...(first_name !== undefined && { first_name }),
+      ...(last_name !== undefined && { last_name: last_name || null }),
+      ...(bio !== undefined && { bio: bio || null }),
+      ...(avatarUrl !== undefined && { avatarUrl }),
+      ...(bannerUrl !== undefined && { bannerUrl }),
     },
   });
 
   await prisma.userProfile.upsert({
     where: { userId },
     update: {
-      ...(gender && { gender }),
-      ...(birthdate && { birthdate: new Date(birthdate) }),
-      ...(location && { location }),
+      ...(gender !== undefined && { gender: gender || "other" }),
+      ...(birthdate !== undefined && { birthdate: birthdate ? new Date(birthdate) : null }),
+      ...(location !== undefined && { location: location || null }),
     },
     create: {
       userId,
-      ...(gender && { gender }),
-      ...(birthdate && { birthdate: new Date(birthdate) }),
-      ...(location && { location }),
+      gender: gender || "other",
+      birthdate: birthdate ? new Date(birthdate) : null,
+      location: location || null,
     },
   });
 
@@ -459,13 +459,13 @@ export const updateSocialMedia = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
 
   if (
-    !websiteUrl &&
-    !socialTwitter &&
-    !socialFacebook &&
-    !socialLinkedin &&
-    !socialInstagram
+    websiteUrl === undefined &&
+    socialTwitter === undefined &&
+    socialFacebook === undefined &&
+    socialLinkedin === undefined &&
+    socialInstagram === undefined
   ) {
-    throw new ApiError(400, "No social media fields provided for update");
+    throw new ApiError(400, "No/invalid social media fields provided for update");
   }
 
   if (!userId) {
@@ -475,19 +475,19 @@ export const updateSocialMedia = asyncHandler(async (req, res) => {
   await prisma.userProfile.upsert({
     where: { userId },
     update: {
-      ...(websiteUrl && { websiteUrl }),
-      ...(socialTwitter && { socialTwitter }),
-      ...(socialFacebook && { socialFacebook }),
-      ...(socialLinkedin && { socialLinkedin }),
-      ...(socialInstagram && { socialInstagram }),
+      ...(websiteUrl !== undefined && { websiteUrl: websiteUrl || null }),
+      ...(socialTwitter !== undefined && { socialTwitter: socialTwitter || null }),
+      ...(socialFacebook !== undefined && { socialFacebook: socialFacebook || null }),
+      ...(socialLinkedin !== undefined && { socialLinkedin: socialLinkedin || null }),
+      ...(socialInstagram !== undefined && { socialInstagram: socialInstagram || null }),
     },
     create: {
       userId,
-      ...(websiteUrl && { websiteUrl }),
-      ...(socialTwitter && { socialTwitter }),
-      ...(socialFacebook && { socialFacebook }),
-      ...(socialLinkedin && { socialLinkedin }),
-      ...(socialInstagram && { socialInstagram }),
+      websiteUrl: websiteUrl || null,
+      socialTwitter: socialTwitter || null,
+      socialFacebook: socialFacebook || null,
+      socialLinkedin: socialLinkedin || null,
+      socialInstagram: socialInstagram || null,
     },
   });
 
@@ -1180,5 +1180,82 @@ export const isFollowing = asyncHandler(async (req, res) => {
     success: true,
     message: "Status fetched",
     isFollowing: !!follow,
+  });
+});
+
+export const publicUserProfile = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+  const currentUserId = req.session?.userId;
+
+  if (!username) {
+    throw new ApiError(400, "Username is required");
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { username: username.toLowerCase().trim() },
+    select: {
+      id: true,
+      username: true,
+      first_name: true,
+      last_name: true,
+      bio: true,
+      avatarUrl: true,
+      bannerUrl: true,
+      isVerified: true,
+      status: true,
+      batch: true,
+      isPremium: true,
+      premiumEnds: true,
+      createdAt: true,
+      profile: {
+        select: {
+          gender: true,
+          birthdate: true,
+          location: true,
+          websiteUrl: true,
+          socialTwitter: true,
+          socialFacebook: true,
+          socialLinkedin: true,
+          socialInstagram: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const [followerCount, followingCount, isFollowingRelation, postCount] = await prisma.$transaction(async (tx) => {
+    return Promise.all([
+      tx.follow.count({
+        where: { followingId: user.id },
+      }),
+      tx.follow.count({
+        where: { followerId: user.id },
+      }),
+      currentUserId
+        ? tx.follow.findFirst({
+            where: { followerId: currentUserId, followingId: user.id },
+          })
+        : Promise.resolve(null),
+      tx.post.count({
+        where: { userId: user.id, status: "active", isReply: false },
+      }),
+    ]);
+  });
+
+  (user as any).follower = followerCount;
+  (user as any).followersCount = followerCount;
+  (user as any).following = followingCount;
+  (user as any).followingCount = followingCount;
+  (user as any).postCount = postCount;
+  (user as any).isFollowing = !!isFollowingRelation;
+
+  return res.status(200).json({
+    success: true,
+    message: "Fetched user profile",
+    userSchema: user, // Keep userSchema as backup if needed
+    user: user,
   });
 });

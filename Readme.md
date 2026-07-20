@@ -22,17 +22,27 @@
 
 This repository contains the backend for a modern, high-performance social media platform. Designed with **scalability**, **security**, and **real-time engagement** in mind, it leverages a modular architecture and cutting-edge technologies to handle rich media, massive user interactions, and complex business logic.
 
+### 💡 The Problem It Solves
+
+Building a modern social media platform introduces significant engineering challenges, particularly around media handling, real-time data flow, and robust security. This backend architecture solves several critical problems:
+- **Synchronous Bottlenecks in Media Processing**: Offloads heavy video transcoding (converting to HLS adaptive streaming format) and image optimization to isolated background workers via BullMQ and Redis, keeping the main API highly responsive.
+- **Real-Time Scalability**: Facilitates instantaneous communication (messaging, live presence, real-time notifications) for concurrent users efficiently using Socket.io.
+- **Session Hijacking & Insecure Access**: Implements an enterprise-grade zero-trust session model, encompassing device-fingerprinting, IP tracking, precise refresh token rotation, and robust Two-Factor Authentication (2FA).
+- **Complex Content Discovery**: Provides a tailored data schema and deep engagement tracking mechanisms (views, interaction types, duration) needed to build and scale algorithmic feeds.
+- **Global Content Delivery Bottlenecks**: Integrates natively with AWS infrastructure to seamlessly upload large assets to S3 and distribute them rapidly through CloudFront CDN.
+
 ---
 
 ## 🛠 Tech Stack & Architecture
 
 ### Core Technologies
-- **Runtime**: [Node.js](https://nodejs.org/) with [TypeScript](https://www.typescriptlang.org/) for type-safe, scalable development.
-- **Framework**: [Express.js](https://expressjs.com/) - minimalist and flexible web application framework.
-- **ORM**: [Prisma](https://www.prisma.io/) for type-safe database access and migrations.
-- **Database**: [PostgreSQL](https://www.postgresql.org/) for relational data; [Redis](https://redis.io/) for caching and queuing.
-- **Background Jobs**: [BullMQ](https://docs.bullmq.io/) for robust job processing (media transcoding, mass emails).
-- **Real-time**: [Socket.io](https://socket.io/) for bi-directional, event-based communication.
+- **Backend & Runtime**: [Node.js](https://nodejs.org/) with [TypeScript](https://www.typescriptlang.org/) and [Express.js](https://expressjs.com/) for a strongly-typed, flexible API framework.
+- **Database & ORM**: [PostgreSQL](https://www.postgresql.org/) for structured relational mapping and [Prisma ORM](https://www.prisma.io/) for type-safe querying and schema management.
+- **Caching & Message Broker**: [Redis](https://redis.io/) paired with [BullMQ](https://docs.bullmq.io/) for high-throughput background job processing.
+- **Real-Time Engine**: [Socket.io](https://socket.io/) for bi-directional, persistent websocket connections.
+- **Cloud Infrastructure**: [AWS S3](https://aws.amazon.com/s3/) (storage), [AWS CloudFront](https://aws.amazon.com/cloudfront/) (CDN), and [AWS Rekognition](https://aws.amazon.com/rekognition/) (image/video analysis).
+- **Security & Validation**: [Zod](https://zod.dev/) for payload validation, [JWT](https://jwt.io/) & [Speakeasy](https://github.com/speakeasyjs/speakeasy) for Auth/2FA, along with Helmet, Express Rate Limit, and DOMPurify for API protection.
+- **Media Processing**: [FFmpeg](https://ffmpeg.org/) (via fluent-ffmpeg) for video segmentation & transcoding.
 
 ### Project Architecture
 The project follows a **Domain-Driven Modular Architecture**, ensuring that each feature set (Auth, Posts, Users) is self-contained yet interoperable.
