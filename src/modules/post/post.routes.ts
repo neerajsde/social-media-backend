@@ -35,6 +35,7 @@ import { createVerifyToken, verifyTokenOptional } from "../../middlewares/auth.j
 
 const router = express.Router();
 router.get("/user/:userId", verifyTokenOptional, getUserPosts);
+router.get("/feed", createVerifyToken("user"), getFeedPosts);
 router.get('/:postId', verifyTokenOptional, getPost);
 router.get('/:postId/comments', verifyTokenOptional, getPostComments);
 router.use(createVerifyToken("user"));
@@ -804,8 +805,6 @@ router.post('/share-post-externally/:postId', sharePostExternally);
  *       401:
  *         description: Unauthorized - missing or invalid token
  */
-router.get('/feed', getFeedPosts);
-router.get('/user/:userId', getUserPosts);
 
 /**
  * @swagger

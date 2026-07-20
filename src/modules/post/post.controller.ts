@@ -12,6 +12,7 @@ import { getClientIp } from "../auth/auth.service.js";
 import { verifyFileKey, verifyFileKeys } from "./post.services.js";
 import { addScanVideoJob } from "../../queues/video.queue.js";
 import { redisClient, REDIS_KEYS, deleteByPattern } from "../../config/redis.config.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 
 
 export const generatePresignedUrl = asyncHandler(async (req, res) => {
@@ -1268,6 +1269,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
+  const feedType = (req.query.type as string) === "following" ? "following" : "foryou";
   const skip = (page - 1) * limit;
 
   if (!userId) {
@@ -1335,78 +1337,106 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
     },
   } as const;
 
+  const feedPostSelect = {
+    ...postSelect,
+    parentPost: { select: postSelect },
+  } as const;
+
+  type FeedPostRow = Prisma.PostGetPayload<{ select: typeof feedPostSelect }>;
+
   const baseWhere = {
     status: "active" as const,
     isReply: false,
   };
 
-  // ── Fetch all three slices in parallel ────────────────────────────
-  const sliceLimit = Math.ceil(limit / 3);
+  let merged: FeedPostRow[];
+  let total: number;
 
-  const [followerPosts, newPosts, randomIds, total] = await Promise.all([
-    // 1. Posts from followed users
-    prisma.post.findMany({
-      where: {
-        ...baseWhere,
-        userId: { in: authorIds },
-        visibility: { in: ["public", "followers"] },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: sliceLimit,
-      select: { ...postSelect, parentPost: { select: postSelect } },
-    }),
+  if (feedType === "following") {
+    [merged, total] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          userId: { in: authorIds },
+          visibility: { in: ["public", "followers"] },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: feedPostSelect,
+      }),
+      prisma.post.count({
+        where: {
+          ...baseWhere,
+          userId: { in: authorIds },
+          visibility: { in: ["public", "followers"] },
+        },
+      }),
+    ]);
+  } else {
+    // ── Fetch all three slices in parallel (For You) ─────────────────
+    const sliceLimit = Math.ceil(limit / 3);
 
-    // 2. Latest public posts from anyone
-    prisma.post.findMany({
-      where: {
-        ...baseWhere,
-        userId: { notIn: authorIds }, // exclude already fetched above
-        visibility: "public",
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: sliceLimit,
-      select: { ...postSelect, parentPost: { select: postSelect } },
-    }),
+    const [followerPosts, newPosts, randomIds, feedTotal] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          userId: { in: authorIds },
+          visibility: { in: ["public", "followers"] },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: sliceLimit,
+        select: feedPostSelect,
+      }),
 
-    // 3. Random public posts IDs
-    prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "Post"
-      WHERE status = 'active'
-        AND visibility = 'public'
-        AND "isReply" = false
-        AND "userId" != ${userId}
-      ORDER BY RANDOM()
-      LIMIT ${sliceLimit}
-    `,
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          userId: { notIn: authorIds },
+          visibility: "public",
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: sliceLimit,
+        select: feedPostSelect,
+      }),
 
-    // Total count for pagination (based on full feed pool)
-    prisma.post.count({
-      where: {
-        ...baseWhere,
-        visibility: { in: ["public", "followers"] },
-      },
-    }),
-  ]);
+      prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Post"
+        WHERE status = 'active'
+          AND visibility = 'public'
+          AND "isReply" = false
+          AND "userId" != ${userId}
+        ORDER BY RANDOM()
+        LIMIT ${sliceLimit}
+      `,
 
-  // Fetch full data for random posts
-  const randomPosts = await prisma.post.findMany({
-    where: { id: { in: randomIds.map((r) => r.id) } },
-    select: { ...postSelect, parentPost: { select: postSelect } },
-  });
+      prisma.post.count({
+        where: {
+          ...baseWhere,
+          visibility: { in: ["public", "followers"] },
+        },
+      }),
+    ]);
 
-  // ── Merge + deduplicate by id ─────────────────────────────────────
-  const seen = new Set<string>();
-  const merged = [...followerPosts, ...newPosts, ...randomPosts].filter((post) => {
-    if (seen.has(post.id)) return false;
-    seen.add(post.id);
-    return true;
-  });
+    const randomPosts = await prisma.post.findMany({
+      where: { id: { in: randomIds.map((r) => r.id) } },
+      select: feedPostSelect,
+    });
+
+    const seen = new Set<string>();
+    merged = [...followerPosts, ...newPosts, ...randomPosts].filter((post) => {
+      if (seen.has(post.id)) return false;
+      seen.add(post.id);
+      return true;
+    });
+    total = feedTotal;
+  }
 
   // ── Normalize ─────────────────────────────────────────────────────
   const normalizePost = (
-    post: (typeof followerPosts)[number] | (typeof followerPosts)[number]["parentPost"]
+    post: FeedPostRow | FeedPostRow["parentPost"]
   ) => {
     if (!post) return null;
     return {
@@ -1416,7 +1446,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       isBookmarked: post.bookmarks.length > 0,
       isOwnPost: post.userId === userId,
       isFollowingAuthor: followingSet.has(post.userId),
-      hashtags: post.hashtags.map((h) => h.hashtag.tag),
+      hashtags: post.hashtags.map((h: { hashtag: { tag: string } }) => h.hashtag.tag),
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
@@ -1821,7 +1851,7 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     for (const f of following) followingSet.add(f.followingId);
   }
 
-  const normalizePost = (post: any) => {
+  const normalizePost = (post: any): any => {
     if (!post) return null;
     return {
       ...post,
