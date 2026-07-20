@@ -1269,22 +1269,21 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
-  const feedType = (req.query.type as string) === "following" ? "following" : "foryou";
+  const feedType =
+    userId && (req.query.type as string) === "following" ? "following" : "foryou";
   const skip = (page - 1) * limit;
 
-  if (!userId) {
-    throw new ApiError(401, "Unauthorized");
-  }
-
   // ── Follow graph ──────────────────────────────────────────────────
-  const following = await prisma.follow.findMany({
-    where: { followerId: userId },
-    select: { followingId: true },
-  });
+  const following = userId
+    ? await prisma.follow.findMany({
+        where: { followerId: userId },
+        select: { followingId: true },
+      })
+    : [];
 
   const followingIds = following.map((f) => f.followingId);
   const followingSet = new Set(followingIds);
-  const authorIds = [...followingIds, userId];
+  const authorIds: string[] = userId ? [...followingIds, userId] : [];
 
   // ── Post select ───────────────────────────────────────────────────
   const postSelect = {
@@ -1323,12 +1322,14 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       },
     },
     likes: {
-      where: { userId, isLiked: true },
+      where: userId
+        ? { userId, isLiked: true }
+        : { userId: { in: [] }, isLiked: true },
       select: { userId: true },
       take: 1,
     },
     bookmarks: {
-      where: { userId },
+      where: userId ? { userId } : { userId: { in: [] } },
       select: { userId: true },
       take: 1,
     },
@@ -1358,7 +1359,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
         where: {
           ...baseWhere,
           userId: { in: authorIds },
-          visibility: { in: ["public", "followers"] },
+          visibility: userId ? { in: ["public", "followers"] } : "public",
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -1376,6 +1377,25 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   } else {
     // ── Fetch all three slices in parallel (For You) ─────────────────
     const sliceLimit = Math.ceil(limit / 3);
+
+    const randomIdsQuery = userId
+      ? prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Post"
+          WHERE status = 'active'
+            AND visibility = 'public'
+            AND "isReply" = false
+            AND "userId" != ${userId}
+          ORDER BY RANDOM()
+          LIMIT ${sliceLimit}
+        `
+      : prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Post"
+          WHERE status = 'active'
+            AND visibility = 'public'
+            AND "isReply" = false
+          ORDER BY RANDOM()
+          LIMIT ${sliceLimit}
+        `;
 
     const [followerPosts, newPosts, randomIds, feedTotal] = await Promise.all([
       prisma.post.findMany({
@@ -1402,20 +1422,12 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
         select: feedPostSelect,
       }),
 
-      prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "Post"
-        WHERE status = 'active'
-          AND visibility = 'public'
-          AND "isReply" = false
-          AND "userId" != ${userId}
-        ORDER BY RANDOM()
-        LIMIT ${sliceLimit}
-      `,
+      randomIdsQuery,
 
       prisma.post.count({
         where: {
           ...baseWhere,
-          visibility: { in: ["public", "followers"] },
+          visibility: userId ? { in: ["public", "followers"] } : "public",
         },
       }),
     ]);
@@ -1444,7 +1456,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       viewCount: Number(post.viewCount),
       isLiked: post.likes.length > 0,
       isBookmarked: post.bookmarks.length > 0,
-      isOwnPost: post.userId === userId,
+      isOwnPost: Boolean(userId && post.userId === userId),
       isFollowingAuthor: followingSet.has(post.userId),
       hashtags: post.hashtags.map((h: { hashtag: { tag: string } }) => h.hashtag.tag),
       parentPost: undefined,
