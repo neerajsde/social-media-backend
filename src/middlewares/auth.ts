@@ -220,3 +220,67 @@ export const createVerifyToken = (type: AuthType | AuthType[]) =>
 
     next();
   });
+
+export const verifyTokenOptional = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.token;
+
+  let token: string | undefined;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (cookieToken) {
+    token = String(cookieToken).trim();
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  const isBlacklisted = await redisClient.get(REDIS_KEYS.blacklistToken(token));
+  if (isBlacklisted) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, ENV.JWT_ACCESS_SECRET) as JwtPayload & JwtLibPayload;
+    if (decoded?.sessionId && decoded?.role === "user") {
+      const sessionDb = await prisma.userSession.findUnique({
+        where: { id: decoded.sessionId },
+        select: {
+          id: true,
+          userId: true,
+          deviceName: true,
+          deviceType: true,
+          os: true,
+          browser: true,
+          ipAddress: true,
+          revokedAt: true,
+          expiresAt: true,
+        },
+      });
+
+      if (sessionDb && !sessionDb.revokedAt && sessionDb.expiresAt >= new Date()) {
+        const ip = getClientIp(req);
+        if (ip && sessionDb.ipAddress === ip) {
+          req.session = {
+            id: sessionDb.id,
+            userId: sessionDb.userId,
+            deviceName: sessionDb.deviceName,
+            deviceType: sessionDb.deviceType,
+            os: sessionDb.os,
+            browser: sessionDb.browser,
+            ipAddress: sessionDb.ipAddress,
+            role: "user",
+            token,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    // Ignore verification errors for optional verify
+  }
+
+  next();
+});
+
