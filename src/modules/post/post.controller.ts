@@ -1714,14 +1714,10 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     throw new ApiError(400, "User ID is required");
   }
 
-  if (!currentUserId) {
-    throw new ApiError(401, "Unauthorized");
-  }
-
   const isOwner = currentUserId === targetUserId;
 
   let isFollowingRelation = false;
-  if (!isOwner) {
+  if (!isOwner && currentUserId) {
     const follow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
@@ -1740,7 +1736,7 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     visibilityCondition = { in: ["public", "followers"] };
   }
 
-  const postSelect = {
+  const postSelect: any = {
     id: true,
     content: true,
     postType: true,
@@ -1775,20 +1771,23 @@ export const getUserPosts = asyncHandler(async (req, res) => {
         loopEnabled: true,
       },
     },
-    likes: {
-      where: { userId: currentUserId, isLiked: true },
-      select: { userId: true },
-      take: 1,
-    },
-    bookmarks: {
-      where: { userId: currentUserId },
-      select: { userId: true },
-      take: 1,
-    },
     hashtags: {
       select: { hashtag: { select: { tag: true } } },
     },
-  } as const;
+  };
+
+  if (currentUserId) {
+    postSelect.likes = {
+      where: { userId: currentUserId, isLiked: true },
+      select: { userId: true },
+      take: 1,
+    };
+    postSelect.bookmarks = {
+      where: { userId: currentUserId },
+      select: { userId: true },
+      take: 1,
+    };
+  }
 
   const [posts, totalCount] = await Promise.all([
     prisma.post.findMany({
@@ -1813,21 +1812,24 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  const following = await prisma.follow.findMany({
-    where: { followerId: currentUserId },
-    select: { followingId: true },
-  });
-  const followingSet = new Set(following.map((f) => f.followingId));
+  const followingSet = new Set<string>();
+  if (currentUserId) {
+    const following = await prisma.follow.findMany({
+      where: { followerId: currentUserId },
+      select: { followingId: true },
+    });
+    for (const f of following) followingSet.add(f.followingId);
+  }
 
   const normalizePost = (post: any) => {
     if (!post) return null;
     return {
       ...post,
       viewCount: Number(post.viewCount),
-      isLiked: post.likes.length > 0,
-      isBookmarked: post.bookmarks.length > 0,
-      isOwnPost: post.userId === currentUserId,
-      isFollowingAuthor: followingSet.has(post.userId),
+      isLiked: post.likes ? post.likes.length > 0 : false,
+      isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
+      isOwnPost: currentUserId ? post.userId === currentUserId : false,
+      isFollowingAuthor: currentUserId ? followingSet.has(post.userId) : false,
       hashtags: post.hashtags.map((h: any) => h.hashtag.tag),
       parentPost: post.parentPost ? normalizePost(post.parentPost) : undefined,
     };

@@ -1202,21 +1202,11 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
       avatarUrl: true,
       bannerUrl: true,
       isVerified: true,
-      status: true,
-      batch: true,
-      isPremium: true,
-      premiumEnds: true,
       createdAt: true,
       profile: {
         select: {
-          gender: true,
-          birthdate: true,
           location: true,
           websiteUrl: true,
-          socialTwitter: true,
-          socialFacebook: true,
-          socialLinkedin: true,
-          socialInstagram: true,
         },
       },
     },
@@ -1245,17 +1235,31 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
     ]);
   });
 
-  (user as any).follower = followerCount;
-  (user as any).followersCount = followerCount;
-  (user as any).following = followingCount;
-  (user as any).followingCount = followingCount;
-  (user as any).postCount = postCount;
-  (user as any).isFollowing = !!isFollowingRelation;
+  const publicProfile = {
+    id: user.id,
+    username: user.username,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    bio: user.bio,
+    avatarUrl: user.avatarUrl,
+    bannerUrl: user.bannerUrl,
+    isVerified: user.isVerified,
+    createdAt: user.createdAt,
+    profile: {
+      location: user.profile?.location ?? null,
+      websiteUrl: user.profile?.websiteUrl ?? null,
+    },
+    follower: followerCount,
+    followersCount: followerCount,
+    following: followingCount,
+    followingCount: followingCount,
+    postCount,
+    isFollowing: !!isFollowingRelation,
+  };
 
   return res.status(200).json({
     success: true,
     message: "Fetched user profile",
-    userSchema: user, // Keep userSchema as backup if needed
-    user: user,
+    user: publicProfile,
   });
 });
