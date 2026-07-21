@@ -12,6 +12,7 @@ import { getClientIp } from "../auth/auth.service.js";
 import { verifyFileKey, verifyFileKeys } from "./post.services.js";
 import { addScanVideoJob } from "../../queues/video.queue.js";
 import { redisClient, REDIS_KEYS, deleteByPattern } from "../../config/redis.config.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 
 
 export const generatePresignedUrl = asyncHandler(async (req, res) => {
@@ -301,28 +302,30 @@ export const createPost = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Something went wrong");
   }
 
-  await prisma.hashtag.createMany({
-    data: tags.map((tag: string) => ({
-      tag,
-      createdBy: userId,
-    })),
-    skipDuplicates: true,
-  });
+  if (tags && tags.length > 0) {
+    await prisma.hashtag.createMany({
+      data: tags.map((tag: string) => ({
+        tag,
+        createdBy: userId,
+      })),
+      skipDuplicates: true,
+    });
 
-  const savedTags = await prisma.hashtag.findMany({
-    where: {
-      tag: { in: tags },
-      createdBy: userId,
-    },
-  });
+    const savedTags = await prisma.hashtag.findMany({
+      where: {
+        tag: { in: tags },
+        createdBy: userId,
+      },
+    });
 
-  await prisma.postHashtag.createMany({
-    data: savedTags.map((tag: any) => ({
-      postId: post.id,
-      hashtagId: tag.id,
-    })),
-    skipDuplicates: true,
-  });
+    await prisma.postHashtag.createMany({
+      data: savedTags.map((tag: any) => ({
+        postId: post.id,
+        hashtagId: tag.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
 
   // notify to all followers
   await bulkNotificationQueue.add("Post-Notification", {
@@ -825,6 +828,13 @@ export const commentOnPost = asyncHandler(async (req, res) => {
   // Invalidate comments cache for this post
   await deleteByPattern(REDIS_KEYS.postCommentsPattern(postId));
 
+  // Update the comment count for the post
+  await prisma.post.update({
+    where: { id: postId },
+    data: {
+      commentCount: { increment: 1 },
+    },
+  });
 
   return res.status(200).json({
     success: true,
@@ -962,6 +972,13 @@ export const deleteComment = asyncHandler(async (req, res) => {
   // Invalidate comments cache for this post
   await deleteByPattern(REDIS_KEYS.postCommentsPattern(postId));
 
+  // Update the comment count for the post
+  await prisma.post.update({
+    where: { id: postId },
+    data: {
+      commentCount: { decrement: 1 },
+    },
+  });
 
   return res.status(200).json({
     success: true,
@@ -1037,11 +1054,160 @@ export const replyOnComment = asyncHandler(async (req, res) => {
   // Invalidate comments cache for this post
   await deleteByPattern(REDIS_KEYS.postCommentsPattern(parentComment.postId));
 
+  // Update the comment count for the post
+  await prisma.post.update({
+    where: { id: parentComment.postId },
+    data: {
+      commentCount: { increment: 1 },
+    },
+  });
+
   return res.status(201).json({
 
     success: true,
     message: "Reply added successfully",
     reply,
+  });
+});
+
+export const getCommentReplies = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const { commentId } = req.params;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  if (!commentId) {
+    throw new ApiError(400, "Comment id is required");
+  }
+
+  // Check if comment exists
+  const parentComment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      id: true,
+      postId: true,
+      post: {
+        select: {
+          status: true,
+          visibility: true,
+          userId: true,
+        },
+      },
+    },
+  });
+
+  if (!parentComment) {
+    throw new ApiError(404, "Comment not found");
+  }
+
+  if (parentComment.post.status !== "active") {
+    throw new ApiError(404, "Post is not active");
+  }
+
+  // Check post visibility
+  const post = parentComment.post;
+  let isFollowingAuthor = false;
+  if (userId && post.userId !== userId) {
+    const following = await prisma.follow.findFirst({
+      where: { followerId: userId, followingId: post.userId },
+    });
+    isFollowingAuthor = !!following;
+  } else if (userId && post.userId === userId) {
+    isFollowingAuthor = true;
+  }
+
+  if (post.visibility === "private" && post.userId !== userId) {
+    throw new ApiError(403, "This post is private");
+  }
+
+  if (post.visibility === "followers" && post.userId !== userId && !isFollowingAuthor) {
+    throw new ApiError(403, "You need to follow the user to view this post");
+  }
+
+  const cacheKey = `${REDIS_KEYS.commentReplies(commentId, page, limit)}:user:${userId || "public"}`;
+  const cachedReplies = await redisClient.get(cacheKey);
+
+  if (cachedReplies) {
+    return res.status(200).json({
+      success: true,
+      data: JSON.parse(cachedReplies),
+    });
+  }
+
+  const [rawReplies, totalReplies] = await Promise.all([
+    prisma.comment.findMany({
+      where: {
+        parentId: commentId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+            isVerified: true,
+            batch: true,
+          },
+        },
+        _count: {
+          select: {
+            commentLike: true,
+          },
+        },
+        ...(userId
+          ? {
+            commentLike: {
+              where: { userId },
+              select: { userId: true },
+              take: 1,
+            },
+          }
+          : {
+            commentLike: { take: 0 },
+          }),
+      },
+      orderBy: { createdAt: "asc" },
+      skip,
+      take: limit,
+    }),
+    prisma.comment.count({
+      where: {
+        parentId: commentId,
+      },
+    }),
+  ]);
+
+  const replies = rawReplies.map((r) => {
+    const { commentLike, _count, ...rest } = r;
+    return {
+      ...rest,
+      author: r.user,
+      user: undefined,
+      isLiked: commentLike?.length > 0,
+      likesCount: _count?.commentLike || 0,
+    };
+  });
+
+  const responseData = {
+    comments: replies,
+    pagination: {
+      page,
+      limit,
+      total: totalReplies,
+      totalPages: Math.ceil(totalReplies / limit),
+      hasMore: skip + replies.length < totalReplies,
+    },
+  };
+
+  if (replies.length > 0) {
+    // 1 hour cache
+    await redisClient.set(cacheKey, JSON.stringify(responseData), { EX: 60 * 60 });
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: responseData,
   });
 });
 
@@ -1105,9 +1271,9 @@ export const likeComment = asyncHandler(async (req, res) => {
   if (existingLike) {
     await prisma.commentLike.delete({
       where: {
-        userId_postId: {
+        userId_commentId: {
           userId,
-          postId,
+          commentId: comment.id,
         },
       },
     });
@@ -1268,21 +1434,21 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
+  const feedType =
+    userId && (req.query.type as string) === "following" ? "following" : "foryou";
   const skip = (page - 1) * limit;
 
-  if (!userId) {
-    throw new ApiError(401, "Unauthorized");
-  }
-
   // ── Follow graph ──────────────────────────────────────────────────
-  const following = await prisma.follow.findMany({
-    where: { followerId: userId },
-    select: { followingId: true },
-  });
+  const following = userId
+    ? await prisma.follow.findMany({
+        where: { followerId: userId },
+        select: { followingId: true },
+      })
+    : [];
 
   const followingIds = following.map((f) => f.followingId);
   const followingSet = new Set(followingIds);
-  const authorIds = [...followingIds, userId];
+  const authorIds: string[] = userId ? [...followingIds, userId] : [];
 
   // ── Post select ───────────────────────────────────────────────────
   const postSelect = {
@@ -1300,6 +1466,8 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       select: {
         id: true,
         username: true,
+        first_name: true,
+        last_name: true,
         avatarUrl: true,
         isVerified: true,
         batch: true,
@@ -1308,6 +1476,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
     video: {
       select: {
         hlsMasterKey: true,
+        originalVideo: true,
         thumbnail: true,
         durationSec: true,
         status: true,
@@ -1321,105 +1490,162 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       },
     },
     likes: {
-      where: { userId, isLiked: true },
+      where: userId
+        ? { userId, isLiked: true }
+        : { userId: { in: [] }, isLiked: true },
       select: { userId: true },
       take: 1,
     },
     bookmarks: {
-      where: { userId },
+      where: userId ? { userId } : { userId: { in: [] } },
       select: { userId: true },
       take: 1,
+    },
+    replies: {
+      where: userId ? { userId, postType: "repost" as const } : { userId: { in: [] } },
+      select: { id: true },
+      take: 1,
+    },
+    _count: {
+      select: { 
+        replies: { where: { postType: "repost" as const } },
+        comments: true
+      },
     },
     hashtags: {
       select: { hashtag: { select: { tag: true } } },
     },
   } as const;
 
+  const feedPostSelect = {
+    ...postSelect,
+    parentPost: { select: postSelect },
+  } as const;
+
+  type FeedPostRow = Prisma.PostGetPayload<{ select: typeof feedPostSelect }>;
+
   const baseWhere = {
     status: "active" as const,
     isReply: false,
   };
 
-  // ── Fetch all three slices in parallel ────────────────────────────
-  const sliceLimit = Math.ceil(limit / 3);
+  let merged: FeedPostRow[];
+  let total: number;
 
-  const [followerPosts, newPosts, randomIds, total] = await Promise.all([
-    // 1. Posts from followed users
-    prisma.post.findMany({
-      where: {
-        ...baseWhere,
-        userId: { in: authorIds },
-        visibility: { in: ["public", "followers"] },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: sliceLimit,
-      select: { ...postSelect, parentPost: { select: postSelect } },
-    }),
+  if (feedType === "following") {
+    [merged, total] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          userId: { in: authorIds },
+          visibility: userId ? { in: ["public", "followers"] } : "public",
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: feedPostSelect,
+      }),
+      prisma.post.count({
+        where: {
+          ...baseWhere,
+          userId: { in: authorIds },
+          visibility: { in: ["public", "followers"] },
+        },
+      }),
+    ]);
+  } else {
+    // ── Fetch all three slices in parallel (For You) ─────────────────
+    const sliceLimit = Math.ceil(limit / 3);
 
-    // 2. Latest public posts from anyone
-    prisma.post.findMany({
-      where: {
-        ...baseWhere,
-        userId: { notIn: authorIds }, // exclude already fetched above
-        visibility: "public",
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: sliceLimit,
-      select: { ...postSelect, parentPost: { select: postSelect } },
-    }),
+    const randomIdsQuery = userId
+      ? prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Post"
+          WHERE status = 'active'
+            AND visibility = 'public'
+            AND "isReply" = false
+            AND "userId" != ${userId}
+          ORDER BY RANDOM()
+          LIMIT ${sliceLimit}
+        `
+      : prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Post"
+          WHERE status = 'active'
+            AND visibility = 'public'
+            AND "isReply" = false
+          ORDER BY RANDOM()
+          LIMIT ${sliceLimit}
+        `;
 
-    // 3. Random public posts IDs
-    prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "Post"
-      WHERE status = 'active'
-        AND visibility = 'public'
-        AND "isReply" = false
-        AND "userId" != ${userId}
-      ORDER BY RANDOM()
-      LIMIT ${sliceLimit}
-    `,
+    const [followerPosts, newPosts, randomIds, feedTotal] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          userId: { in: authorIds },
+          visibility: { in: ["public", "followers"] },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: sliceLimit,
+        select: feedPostSelect,
+      }),
 
-    // Total count for pagination (based on full feed pool)
-    prisma.post.count({
-      where: {
-        ...baseWhere,
-        visibility: { in: ["public", "followers"] },
-      },
-    }),
-  ]);
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          userId: { notIn: authorIds },
+          visibility: "public",
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: sliceLimit,
+        select: feedPostSelect,
+      }),
 
-  // Fetch full data for random posts
-  const randomPosts = await prisma.post.findMany({
-    where: { id: { in: randomIds.map((r) => r.id) } },
-    select: { ...postSelect, parentPost: { select: postSelect } },
-  });
+      randomIdsQuery,
 
-  // ── Merge + deduplicate by id ─────────────────────────────────────
-  const seen = new Set<string>();
-  const merged = [...followerPosts, ...newPosts, ...randomPosts].filter((post) => {
-    if (seen.has(post.id)) return false;
-    seen.add(post.id);
-    return true;
-  });
+      prisma.post.count({
+        where: {
+          ...baseWhere,
+          visibility: userId ? { in: ["public", "followers"] } : "public",
+        },
+      }),
+    ]);
+
+    const randomPosts = await prisma.post.findMany({
+      where: { id: { in: randomIds.map((r) => r.id) } },
+      select: feedPostSelect,
+    });
+
+    const seen = new Set<string>();
+    merged = [...followerPosts, ...newPosts, ...randomPosts].filter((post) => {
+      if (seen.has(post.id)) return false;
+      seen.add(post.id);
+      return true;
+    });
+    total = feedTotal;
+  }
 
   // ── Normalize ─────────────────────────────────────────────────────
   const normalizePost = (
-    post: (typeof followerPosts)[number] | (typeof followerPosts)[number]["parentPost"]
+    post: FeedPostRow | FeedPostRow["parentPost"]
   ) => {
     if (!post) return null;
     return {
       ...post,
       viewCount: Number(post.viewCount),
+      sharesCount: post._count?.replies || 0,
+      commentsCount: post._count?.comments || post.commentCount || 0,
       isLiked: post.likes.length > 0,
       isBookmarked: post.bookmarks.length > 0,
-      isOwnPost: post.userId === userId,
+      isReposted: post.replies ? post.replies.length > 0 : false,
+      isOwnPost: Boolean(userId && post.userId === userId),
       isFollowingAuthor: followingSet.has(post.userId),
-      hashtags: post.hashtags.map((h) => h.hashtag.tag),
+      hashtags: post.hashtags.map((h: { hashtag: { tag: string } }) => h.hashtag.tag),
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
+      replies: undefined,
+      _count: undefined,
     };
   };
 
@@ -1478,6 +1704,8 @@ export const getPost = asyncHandler(async (req, res) => {
       select: {
         id: true,
         username: true,
+        first_name: true,
+        last_name: true,
         avatarUrl: true,
         isVerified: true,
         batch: true,
@@ -1510,11 +1738,23 @@ export const getPost = asyncHandler(async (req, res) => {
           select: { userId: true },
           take: 1,
         },
+        replies: {
+          where: { userId, postType: "repost" as const },
+          select: { id: true },
+          take: 1,
+        },
       }
       : {
         likes: { take: 0 },
         bookmarks: { take: 0 },
+        replies: { take: 0 },
       }),
+    _count: {
+      select: { 
+        replies: { where: { postType: "repost" as const } },
+        comments: true
+      },
+    },
     hashtags: {
       select: { hashtag: { select: { tag: true } } },
     },
@@ -1556,14 +1796,19 @@ export const getPost = asyncHandler(async (req, res) => {
     return {
       ...p,
       viewCount: Number(p.viewCount),
+      sharesCount: p._count?.replies || 0,
+      commentsCount: p._count?.comments || p.commentCount || 0,
       isLiked: p.likes?.length > 0,
       isBookmarked: p.bookmarks?.length > 0,
+      isReposted: p.replies?.length > 0,
       isOwnPost: p.userId === userId,
       isFollowingAuthor: p.userId === post.userId ? isFollowingAuthor : false,
       hashtags: p.hashtags?.map((h: any) => h.hashtag.tag) || [],
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
+      replies: undefined,
+      _count: undefined,
     };
   };
 
@@ -1639,6 +1884,8 @@ export const getPostComments = asyncHandler(async (req, res) => {
         user: {
           select: {
             id: true,
+            first_name: true,
+            last_name: true,
             username: true,
             avatarUrl: true,
             isVerified: true,
@@ -1714,14 +1961,10 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     throw new ApiError(400, "User ID is required");
   }
 
-  if (!currentUserId) {
-    throw new ApiError(401, "Unauthorized");
-  }
-
   const isOwner = currentUserId === targetUserId;
 
   let isFollowingRelation = false;
-  if (!isOwner) {
+  if (!isOwner && currentUserId) {
     const follow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
@@ -1740,7 +1983,7 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     visibilityCondition = { in: ["public", "followers"] };
   }
 
-  const postSelect = {
+  const postSelect: any = {
     id: true,
     content: true,
     postType: true,
@@ -1775,20 +2018,27 @@ export const getUserPosts = asyncHandler(async (req, res) => {
         loopEnabled: true,
       },
     },
-    likes: {
-      where: { userId: currentUserId, isLiked: true },
-      select: { userId: true },
-      take: 1,
-    },
-    bookmarks: {
-      where: { userId: currentUserId },
-      select: { userId: true },
-      take: 1,
-    },
     hashtags: {
       select: { hashtag: { select: { tag: true } } },
     },
-  } as const;
+  };
+
+  if (currentUserId) {
+    postSelect.likes = {
+      where: { userId: currentUserId, isLiked: true },
+      select: { userId: true },
+      take: 1,
+    };
+    postSelect.bookmarks = {
+      where: { userId: currentUserId },
+      select: { userId: true },
+      take: 1,
+    };
+  }
+  
+  postSelect._count = {
+    select: { comments: true },
+  };
 
   const [posts, totalCount] = await Promise.all([
     prisma.post.findMany({
@@ -1813,21 +2063,25 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  const following = await prisma.follow.findMany({
-    where: { followerId: currentUserId },
-    select: { followingId: true },
-  });
-  const followingSet = new Set(following.map((f) => f.followingId));
+  const followingSet = new Set<string>();
+  if (currentUserId) {
+    const following = await prisma.follow.findMany({
+      where: { followerId: currentUserId },
+      select: { followingId: true },
+    });
+    for (const f of following) followingSet.add(f.followingId);
+  }
 
-  const normalizePost = (post: any) => {
+  const normalizePost = (post: any): any => {
     if (!post) return null;
     return {
       ...post,
       viewCount: Number(post.viewCount),
-      isLiked: post.likes.length > 0,
-      isBookmarked: post.bookmarks.length > 0,
-      isOwnPost: post.userId === currentUserId,
-      isFollowingAuthor: followingSet.has(post.userId),
+      commentsCount: post._count?.comments || post.commentCount || 0,
+      isLiked: post.likes ? post.likes.length > 0 : false,
+      isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
+      isOwnPost: currentUserId ? post.userId === currentUserId : false,
+      isFollowingAuthor: currentUserId ? followingSet.has(post.userId) : false,
       hashtags: post.hashtags.map((h: any) => h.hashtag.tag),
       parentPost: post.parentPost ? normalizePost(post.parentPost) : undefined,
     };

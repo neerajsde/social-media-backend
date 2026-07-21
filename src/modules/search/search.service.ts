@@ -242,7 +242,7 @@ export const executeSearch = async ({
   page,
   limit,
 }: {
-  userId: string;
+  userId: string | undefined;
   query: string;
   type: string;
   page: number;
@@ -277,7 +277,7 @@ export const executeSearch = async ({
   }
 
   // Push event to BullMQ if it's a real query string
-  if (normalizedQuery && normalizedQuery !== "default" && type !== "trending") {
+  if (userId && normalizedQuery && normalizedQuery !== "default" && type !== "trending") {
     await searchQueue.add(
       "record_search",
       {

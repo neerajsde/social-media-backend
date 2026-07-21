@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { searchController } from "./search.controller.js";
-import { createVerifyToken } from "../../middlewares/auth.js";
+import { createVerifyToken, verifyTokenOptional } from "../../middlewares/auth.js";
 import {
   validateSearchQuery,
   validateRecentSearchQuery,
@@ -8,9 +8,6 @@ import {
 } from "./search.validation.js";
 
 const searchRouter = Router();
-
-// Require user authentication for all search routes
-searchRouter.use(createVerifyToken("user"));
 
 /**
  * @swagger
@@ -55,6 +52,7 @@ searchRouter.use(createVerifyToken("user"));
  */
 searchRouter.get(
   "/recent",
+  createVerifyToken("user"),
   validateRecentSearchQuery,
   searchController.getRecentSearches
 );
@@ -97,6 +95,7 @@ searchRouter.get(
  */
 searchRouter.delete(
   "/recent/:id",
+  createVerifyToken("user"),
   validateRemoveRecentSearchParams,
   searchController.removeRecentSearch
 );
@@ -156,6 +155,6 @@ searchRouter.delete(
  *       401:
  *         description: Unauthorized
  */
-searchRouter.get("/", validateSearchQuery, searchController.search);
+searchRouter.get("/", verifyTokenOptional, validateSearchQuery, searchController.search);
 
 export default searchRouter;

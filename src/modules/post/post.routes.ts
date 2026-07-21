@@ -18,6 +18,7 @@ import {
   getFeedPosts,
   getPost,
   getPostComments,
+  getCommentReplies,
   getUserPosts,
 } from "./post.controller.js";
 import {
@@ -31,9 +32,14 @@ import {
   commentReplyValidation,
   editCommentValidation,
 } from "./post.validation.js";
-import { createVerifyToken } from "../../middlewares/auth.js";
+import { createVerifyToken, verifyTokenOptional } from "../../middlewares/auth.js";
 
 const router = express.Router();
+router.get("/user/:userId", verifyTokenOptional, getUserPosts);
+router.get("/feed", verifyTokenOptional, getFeedPosts);
+router.get('/:postId', verifyTokenOptional, getPost);
+router.get('/:postId/comments', verifyTokenOptional, getPostComments);
+router.get('/comment/:commentId/replies', verifyTokenOptional, getCommentReplies);
 router.use(createVerifyToken("user"));
 
 /**
@@ -801,8 +807,6 @@ router.post('/share-post-externally/:postId', sharePostExternally);
  *       401:
  *         description: Unauthorized - missing or invalid token
  */
-router.get('/feed', getFeedPosts);
-router.get('/user/:userId', getUserPosts);
 
 /**
  * @swagger

@@ -4,7 +4,7 @@ import * as searchService from "./search.service.js";
 
 const search = asyncHandler(async (req: Request, res: Response) => {
   const { q, type, page, limit } = req.query as any;
-  const userId = req.session!.userId as string;
+  const userId = req.session?.userId;
 
   const results = await searchService.executeSearch({
     userId,

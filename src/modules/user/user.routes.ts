@@ -19,7 +19,7 @@ import {
   isFollowing,
   publicUserProfile,
 } from "./user.controller.js";
-import { createVerifyToken } from "../../middlewares/auth.js";
+import { createVerifyToken, verifyTokenOptional } from "../../middlewares/auth.js";
 import {
   updateProfileValidation,
   updateSocialValidation,
@@ -31,6 +31,8 @@ import {
 } from "./user.validation.js";
 
 const router = express.Router();
+
+router.get("/profile/:username", verifyTokenOptional, publicUserProfile);
 router.use(createVerifyToken("user"));
 
 /**
