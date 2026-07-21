@@ -654,7 +654,7 @@ model CommentLike {
   post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
   comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
-  @@id([userId, postId])
+  @@id([userId, commentId])
 }
 
 model Follow {

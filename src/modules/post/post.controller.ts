@@ -1269,9 +1269,9 @@ export const likeComment = asyncHandler(async (req, res) => {
   if (existingLike) {
     await prisma.commentLike.delete({
       where: {
-        userId_postId: {
+        userId_commentId: {
           userId,
-          postId,
+          commentId: comment.id,
         },
       },
     });
