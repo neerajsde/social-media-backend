@@ -826,6 +826,13 @@ export const commentOnPost = asyncHandler(async (req, res) => {
   // Invalidate comments cache for this post
   await deleteByPattern(REDIS_KEYS.postCommentsPattern(postId));
 
+  // Update the comment count for the post
+  await prisma.post.update({
+    where: { id: postId },
+    data: {
+      commentCount: { increment: 1 },
+    },
+  });
 
   return res.status(200).json({
     success: true,
@@ -963,6 +970,13 @@ export const deleteComment = asyncHandler(async (req, res) => {
   // Invalidate comments cache for this post
   await deleteByPattern(REDIS_KEYS.postCommentsPattern(postId));
 
+  // Update the comment count for the post
+  await prisma.post.update({
+    where: { id: postId },
+    data: {
+      commentCount: { decrement: 1 },
+    },
+  });
 
   return res.status(200).json({
     success: true,
@@ -1037,6 +1051,14 @@ export const replyOnComment = asyncHandler(async (req, res) => {
 
   // Invalidate comments cache for this post
   await deleteByPattern(REDIS_KEYS.postCommentsPattern(parentComment.postId));
+
+  // Update the comment count for the post
+  await prisma.post.update({
+    where: { id: parentComment.postId },
+    data: {
+      commentCount: { increment: 1 },
+    },
+  });
 
   return res.status(201).json({
 
@@ -1475,6 +1497,17 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       select: { userId: true },
       take: 1,
     },
+    replies: {
+      where: userId ? { userId, postType: "repost" as const } : { userId: { in: [] } },
+      select: { id: true },
+      take: 1,
+    },
+    _count: {
+      select: { 
+        replies: { where: { postType: "repost" as const } },
+        comments: true
+      },
+    },
     hashtags: {
       select: { hashtag: { select: { tag: true } } },
     },
@@ -1596,14 +1629,19 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
     return {
       ...post,
       viewCount: Number(post.viewCount),
+      sharesCount: post._count?.replies || 0,
+      commentsCount: post._count?.comments || post.commentCount || 0,
       isLiked: post.likes.length > 0,
       isBookmarked: post.bookmarks.length > 0,
+      isReposted: post.replies ? post.replies.length > 0 : false,
       isOwnPost: Boolean(userId && post.userId === userId),
       isFollowingAuthor: followingSet.has(post.userId),
       hashtags: post.hashtags.map((h: { hashtag: { tag: string } }) => h.hashtag.tag),
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
+      replies: undefined,
+      _count: undefined,
     };
   };
 
@@ -1694,11 +1732,23 @@ export const getPost = asyncHandler(async (req, res) => {
           select: { userId: true },
           take: 1,
         },
+        replies: {
+          where: { userId, postType: "repost" as const },
+          select: { id: true },
+          take: 1,
+        },
       }
       : {
         likes: { take: 0 },
         bookmarks: { take: 0 },
+        replies: { take: 0 },
       }),
+    _count: {
+      select: { 
+        replies: { where: { postType: "repost" as const } },
+        comments: true
+      },
+    },
     hashtags: {
       select: { hashtag: { select: { tag: true } } },
     },
@@ -1740,14 +1790,19 @@ export const getPost = asyncHandler(async (req, res) => {
     return {
       ...p,
       viewCount: Number(p.viewCount),
+      sharesCount: p._count?.replies || 0,
+      commentsCount: p._count?.comments || p.commentCount || 0,
       isLiked: p.likes?.length > 0,
       isBookmarked: p.bookmarks?.length > 0,
+      isReposted: p.replies?.length > 0,
       isOwnPost: p.userId === userId,
       isFollowingAuthor: p.userId === post.userId ? isFollowingAuthor : false,
       hashtags: p.hashtags?.map((h: any) => h.hashtag.tag) || [],
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
+      replies: undefined,
+      _count: undefined,
     };
   };
 
@@ -1823,6 +1878,8 @@ export const getPostComments = asyncHandler(async (req, res) => {
         user: {
           select: {
             id: true,
+            first_name: true,
+            last_name: true,
             username: true,
             avatarUrl: true,
             isVerified: true,
@@ -1972,6 +2029,10 @@ export const getUserPosts = asyncHandler(async (req, res) => {
       take: 1,
     };
   }
+  
+  postSelect._count = {
+    select: { comments: true },
+  };
 
   const [posts, totalCount] = await Promise.all([
     prisma.post.findMany({
@@ -2010,6 +2071,7 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     return {
       ...post,
       viewCount: Number(post.viewCount),
+      commentsCount: post._count?.comments || post.commentCount || 0,
       isLiked: post.likes ? post.likes.length > 0 : false,
       isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
       isOwnPost: currentUserId ? post.userId === currentUserId : false,
