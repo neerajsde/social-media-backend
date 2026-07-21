@@ -7,6 +7,7 @@ import activityRoutes from "../modules/activity/activity.routes.js";
 import searchRouter from "../modules/search/search.routes.js";
 import marketPlaceRouter from "../modules/marketplace/marketplace.routers.js";
 import dashboardRoutes from "../modules/dashboard/dashboard.routes.js";
+import chatRoutes from "../modules/chat/chat.routes.js";
 const router = express.Router();
 
 /**
@@ -59,5 +60,6 @@ router.use('/activity', activityRoutes);
 router.use('/search', searchRouter);
 router.use('/marketPlace', marketPlaceRouter);
 router.use('/dashboard', dashboardRoutes);
+router.use('/chat', chatRoutes);
 
 export default router;

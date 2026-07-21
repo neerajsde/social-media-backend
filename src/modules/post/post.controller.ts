@@ -1362,6 +1362,40 @@ export const sharePostInApp = asyncHandler(async (req, res) => {
     },
   });
 
+  // Create a chat message for the shared post
+  let conversation = await prisma.conversation.findFirst({
+    where: {
+      AND: [
+        { participants: { some: { userId } } },
+        { participants: { some: { userId: receiverId } } },
+      ],
+    },
+  });
+
+  if (!conversation) {
+    conversation = await prisma.conversation.create({
+      data: {
+        participants: {
+          create: [{ userId }, { userId: receiverId }],
+        },
+      },
+    });
+  } else {
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
+  }
+
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      senderId: userId,
+      sharedPostId: postId,
+      content: `[POST_SHARE:${postId}]`,
+    },
+  });
+
   return res.status(201).json({
     success: true,
     message: "Post sent successfully.",
