@@ -302,28 +302,30 @@ export const createPost = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Something went wrong");
   }
 
-  await prisma.hashtag.createMany({
-    data: tags.map((tag: string) => ({
-      tag,
-      createdBy: userId,
-    })),
-    skipDuplicates: true,
-  });
+  if (tags && tags.length > 0) {
+    await prisma.hashtag.createMany({
+      data: tags.map((tag: string) => ({
+        tag,
+        createdBy: userId,
+      })),
+      skipDuplicates: true,
+    });
 
-  const savedTags = await prisma.hashtag.findMany({
-    where: {
-      tag: { in: tags },
-      createdBy: userId,
-    },
-  });
+    const savedTags = await prisma.hashtag.findMany({
+      where: {
+        tag: { in: tags },
+        createdBy: userId,
+      },
+    });
 
-  await prisma.postHashtag.createMany({
-    data: savedTags.map((tag: any) => ({
-      postId: post.id,
-      hashtagId: tag.id,
-    })),
-    skipDuplicates: true,
-  });
+    await prisma.postHashtag.createMany({
+      data: savedTags.map((tag: any) => ({
+        postId: post.id,
+        hashtagId: tag.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
 
   // notify to all followers
   await bulkNotificationQueue.add("Post-Notification", {
@@ -1464,6 +1466,8 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       select: {
         id: true,
         username: true,
+        first_name: true,
+        last_name: true,
         avatarUrl: true,
         isVerified: true,
         batch: true,
@@ -1700,6 +1704,8 @@ export const getPost = asyncHandler(async (req, res) => {
       select: {
         id: true,
         username: true,
+        first_name: true,
+        last_name: true,
         avatarUrl: true,
         isVerified: true,
         batch: true,
