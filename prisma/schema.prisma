@@ -131,6 +131,10 @@ model User {
   userActivity UserActivity[]
   searchHistory SearchHistory[]
 
+  // Chat
+  participants    Participant[]
+  sentMessages    Message[]
+
   @@index([createdAt])
   @@index([lastSeenAt])
   @@index([status])
@@ -496,9 +500,16 @@ enum PostType {
 enum NotificationType {
   like
   comment
+  reply
+  comment_like
   follow
+  follow_request
   mention
   repost
+  share
+  message
+  system
+  new_post
 }
 
 enum PostVisibility {
@@ -571,6 +582,9 @@ model Post {
 
   userActivity UserActivity[]
 
+  // Chat shares
+  sharedInMessages Message[]
+
   @@index([userId])
   @@index([createdAt(sort: Desc)])
 }
@@ -639,6 +653,7 @@ model Comment {
   parent      Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies     Comment[]     @relation("CommentReplies")
   commentLike CommentLike[]
+  notifications Notification[]
 
   @@index([postId])
 }
@@ -815,18 +830,22 @@ model SearchHistory {
 }
 
 model Notification {
-  id      String  @id @default(uuid()) @db.Uuid
-  userId  String  @db.Uuid
-  actorId String  @db.Uuid
-  postId  String? @db.Uuid
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @db.Uuid
+  actorId   String  @db.Uuid
+  postId    String? @db.Uuid
+  commentId String? @db.Uuid
+  messageId String? @db.Uuid
 
   type      NotificationType
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
 
-  user  User  @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
-  actor User  @relation("ActorNotifications", fields: [actorId], references: [id], onDelete: Cascade)
-  post  Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user    User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  actor   User     @relation("ActorNotifications", fields: [actorId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 model MarketPlace {
@@ -1010,4 +1029,49 @@ model AdEvent {
 
   @@index([adId, type])
   @@index([createdAt])
+}
+
+// =====================================================
+// CHAT / MESSAGING
+// =====================================================
+
+model Conversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants Participant[]
+  messages     Message[]
+}
+
+model Participant {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  userId         String       @db.Uuid
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  senderId       String       @db.Uuid
+  content        String?
+  sharedPostId   String?      @db.Uuid
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sharedPost     Post?        @relation(fields: [sharedPostId], references: [id], onDelete: SetNull)
+
+  notifications  Notification[]
+
+  @@index([conversationId])
+  @@index([senderId])
 }

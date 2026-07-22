@@ -1,7 +1,7 @@
 import { asyncHandler } from "../../utils/async-handler.js";
 import { ApiError } from "../../utils/api-error.js";
 import { prisma } from "../../config/prisma.config.js";
-import { bulkNotificationQueue } from "../../queues/messaging.queue.js";
+import { bulkNotificationQueue, NotificationQueue } from "../../queues/messaging.queue.js";
 import {
   deleteFile,
   deleteFiles,
@@ -327,6 +327,34 @@ export const createPost = asyncHandler(async (req, res) => {
     });
   }
 
+  if (post && post.content) {
+    const mentionRegex = /@([a-zA-Z0-9_]{3,30})/g;
+    const mentions = Array.from(post.content.matchAll(mentionRegex)).map((m) => m[1]);
+    
+    if (mentions.length > 0) {
+      const mentionedUsers = await prisma.user.findMany({
+        where: { username: { in: mentions } },
+        select: { id: true }
+      });
+      
+      const mentionJobs = mentionedUsers
+        .filter((u) => u.id !== userId)
+        .map((u) => ({
+          name: "Notification",
+          data: {
+            userId: u.id,
+            actorId: userId,
+            type: "mention",
+            postId: post.id,
+          }
+        }));
+
+      if (mentionJobs.length > 0) {
+        await NotificationQueue.addBulk(mentionJobs);
+      }
+    }
+  }
+
   // notify to all followers
   await bulkNotificationQueue.add("Post-Notification", {
     postId: post.id,
@@ -584,19 +612,29 @@ export const bookmarkPost = asyncHandler(async (req, res) => {
         postId,
       },
     });
+    return res.status(200).json({
+      success: true,
+      message: "Post bookmarked successfully",
+    });
   } catch (error: any) {
-    // Handle duplicate bookmark
+    // Handle duplicate bookmark by toggling it off
     if (error.code === "P2002") {
-      throw new ApiError(400, "You have already bookmarked this post");
+      await prisma.bookmark.delete({
+        where: {
+          userId_postId: {
+            userId,
+            postId,
+          },
+        },
+      });
+      return res.status(200).json({
+        success: true,
+        message: "Post unbookmarked successfully",
+      });
     }
 
     throw new ApiError(500, "Something went wrong");
   }
-
-  return res.status(200).json({
-    success: true,
-    message: "Post bookmarked successfully",
-  });
 });
 
 export const likePost = asyncHandler(async (req, res) => {
@@ -1362,6 +1400,40 @@ export const sharePostInApp = asyncHandler(async (req, res) => {
     },
   });
 
+  // Create a chat message for the shared post
+  let conversation = await prisma.conversation.findFirst({
+    where: {
+      AND: [
+        { participants: { some: { userId } } },
+        { participants: { some: { userId: receiverId } } },
+      ],
+    },
+  });
+
+  if (!conversation) {
+    conversation = await prisma.conversation.create({
+      data: {
+        participants: {
+          create: [{ userId }, { userId: receiverId }],
+        },
+      },
+    });
+  } else {
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
+  }
+
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      senderId: userId,
+      sharedPostId: postId,
+      content: `[POST_SHARE:${postId}]`,
+    },
+  });
+
   return res.status(201).json({
     success: true,
     message: "Post sent successfully.",
@@ -1434,8 +1506,9 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
+  const queryType = req.query.type as string;
   const feedType =
-    userId && (req.query.type as string) === "following" ? "following" : "foryou";
+    userId && queryType === "following" ? "following" : queryType === "trending" ? "trending" : "foryou";
   const skip = (page - 1) * limit;
 
   // ── Follow graph ──────────────────────────────────────────────────
@@ -1550,6 +1623,29 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
           ...baseWhere,
           userId: { in: authorIds },
           visibility: { in: ["public", "followers"] },
+        },
+      }),
+    ]);
+  } else if (feedType === "trending") {
+    [merged, total] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          ...baseWhere,
+          visibility: userId ? { in: ["public", "followers"] } : "public",
+        },
+        orderBy: [
+          { viewCount: "desc" },
+          { likeCount: "desc" },
+          { createdAt: "desc" }
+        ],
+        skip,
+        take: limit,
+        select: feedPostSelect,
+      }),
+      prisma.post.count({
+        where: {
+          ...baseWhere,
+          visibility: userId ? { in: ["public", "followers"] } : "public",
         },
       }),
     ]);
@@ -2099,5 +2195,159 @@ export const getUserPosts = asyncHandler(async (req, res) => {
       totalCount,
       totalPages: Math.ceil(totalCount / limit),
     },
+  });
+});
+
+export const getBookmarkedPosts = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 20);
+  const skip = (page - 1) * limit;
+
+  if (!userId) {
+    throw new ApiError(401, "unauthorized");
+  }
+
+  const postSelect: any = {
+    id: true,
+    content: true,
+    postType: true,
+    images: true,
+    likeCount: true,
+    commentCount: true,
+    viewCount: true,
+    visibility: true,
+    status: true,
+    createdAt: true,
+    userId: true,
+    user: {
+      select: {
+        id: true,
+        username: true,
+        avatarUrl: true,
+        isVerified: true,
+        batch: true,
+      },
+    },
+    video: {
+      select: {
+        hlsMasterKey: true,
+        thumbnail: true,
+        durationSec: true,
+        status: true,
+      },
+    },
+    reel: {
+      select: {
+        musicName: true,
+        musicUrl: true,
+        loopEnabled: true,
+      },
+    },
+    hashtags: {
+      select: { hashtag: { select: { tag: true } } },
+    },
+    likes: {
+      where: { userId: userId, isLiked: true },
+      select: { userId: true },
+      take: 1,
+    },
+    bookmarks: {
+      where: { userId: userId },
+      select: { userId: true },
+      take: 1,
+    },
+    _count: {
+      select: { comments: true },
+    },
+  };
+
+  const feedPostSelect = {
+    ...postSelect,
+    parentPost: { select: postSelect },
+  };
+
+  const [bookmarks, totalCount] = await Promise.all([
+    prisma.bookmark.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      include: {
+        post: {
+          select: feedPostSelect,
+        },
+      },
+    }),
+    prisma.bookmark.count({
+      where: { userId },
+    }),
+  ]);
+
+  const following = await prisma.follow.findMany({
+    where: { followerId: userId },
+    select: { followingId: true },
+  });
+  const followingSet = new Set(following.map((f: any) => f.followingId));
+
+  const normalizePost = (post: any): any => {
+    if (!post) return null;
+    return {
+      ...post,
+      viewCount: Number(post.viewCount),
+      commentsCount: post._count?.comments || post.commentCount || 0,
+      isLiked: post.likes ? post.likes.length > 0 : false,
+      isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
+      isOwnPost: post.userId === userId,
+      isFollowingAuthor: followingSet.has(post.userId),
+      hashtags: post.hashtags ? post.hashtags.map((h: any) => h.hashtag?.tag).filter(Boolean) : [],
+      parentPost: post.parentPost ? normalizePost(post.parentPost) : undefined,
+    };
+  };
+
+  const formattedPosts = bookmarks
+    .map((bookmark: any) => bookmark.post)
+    .filter((post: any) => post?.status === "active")
+    .map(normalizePost);
+
+  res.status(200).json({
+    success: true,
+    message: "Bookmarked posts fetched successfully",
+    posts: formattedPosts,
+    meta: {
+      page,
+      limit,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+    },
+  });
+});
+
+export const getTrendingTags = asyncHandler(async (req, res) => {
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 5);
+
+  const tags = await prisma.hashtag.findMany({
+    take: limit,
+    include: {
+      _count: {
+        select: { posts: true },
+      },
+    },
+    orderBy: {
+      posts: {
+        _count: "desc",
+      },
+    },
+  });
+
+  const formattedTags = tags.map((t: any) => ({
+    tag: t.tag,
+    postCount: t._count.posts,
+  }));
+
+  res.status(200).json({
+    success: true,
+    message: "Trending tags fetched successfully",
+    tags: formattedTags,
   });
 });

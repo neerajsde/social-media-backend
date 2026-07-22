@@ -59,9 +59,32 @@ export const initSocket = (server: HTTPServer) => {
     }
   });
 
+  // Setup Redis Subscriber for real-time notifications
+  const redisSubscriber = redisClient.duplicate();
+  redisSubscriber.connect().then(() => {
+    console.log("✅ Redis Subscriber connected for Socket.IO");
+    redisSubscriber.subscribe("realtime_notification", (message) => {
+      try {
+        const notification = JSON.parse(message);
+        // Emit only to the specific user's room
+        if (notification.userId) {
+          io.to(notification.userId).emit("new_notification", notification);
+        }
+      } catch (err) {
+        console.error("Error parsing realtime_notification message", err);
+      }
+    });
+  }).catch(err => console.error("Redis Subscriber connection failed", err));
+
   io.on("connection", async (socket: AuthenticatedSocket) => {
     console.log("User connected:", socket.user?.socket_id);
     await saveConnection(socket);
+
+    // Join user to their personal room for direct messages and notifications
+    if (socket.user?.id) {
+      socket.join(socket.user.id);
+      console.log(`User ${socket.user.id} joined personal room`);
+    }
 
     /**
      * JOIN CONVERSATION

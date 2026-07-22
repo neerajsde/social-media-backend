@@ -2,7 +2,8 @@ import axios from "axios";
 import { asyncHandler } from "../../utils/async-handler.js";
 import { ApiError } from "../../utils/api-error.js";
 import { prisma } from "../../config/prisma.config.js";
-import { redisClient, REDIS_KEYS } from "../../config/redis.config.js";
+import { redisClient, REDIS_KEYS, deleteByPattern } from "../../config/redis.config.js";
+import { NotificationQueue } from "../../queues/messaging.queue.js";
 import { generateOTP, verifyOTP, generateToken } from "../../utils/core.js";
 import {
   getClientIp,
@@ -1014,6 +1015,12 @@ export const followUser = asyncHandler(async (req, res) => {
   await redisClient.del(REDIS_KEYS.userdata(followingId));
   await redisClient.del(REDIS_KEYS.userdata(followerId));
 
+  await NotificationQueue.add("Notification", {
+    userId: followingId,
+    actorId: followerId,
+    type: "follow",
+  });
+
   return res.status(200).json({
     success: true,
     message: "User followed successfully",
@@ -1261,5 +1268,46 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
     success: true,
     message: "Fetched user profile",
     user: publicProfile,
+  });
+});
+
+export const getSuggestedUsers = asyncHandler(async (req, res) => {
+  const currentUserId = req.session?.userId;
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 4);
+
+  let excludeIds: string[] = [];
+  if (currentUserId) {
+    const following = await prisma.follow.findMany({
+      where: { followerId: currentUserId },
+      select: { followingId: true },
+    });
+    excludeIds = [currentUserId, ...following.map((f: any) => f.followingId)];
+  }
+
+  const suggestedUsers = await prisma.user.findMany({
+    where: {
+      status: "active",
+      id: { notIn: excludeIds },
+    },
+    take: limit,
+    orderBy: {
+      followers: {
+        _count: "desc",
+      },
+    },
+    select: {
+      id: true,
+      username: true,
+      first_name: true,
+      last_name: true,
+      avatarUrl: true,
+      isVerified: true,
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Suggested users fetched successfully",
+    users: suggestedUsers,
   });
 });
