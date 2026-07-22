@@ -20,6 +20,8 @@ import {
   getPostComments,
   getCommentReplies,
   getUserPosts,
+  getBookmarkedPosts,
+  getTrendingTags,
 } from "./post.controller.js";
 import {
   createPostValidation,
@@ -37,6 +39,8 @@ import { createVerifyToken, verifyTokenOptional } from "../../middlewares/auth.j
 const router = express.Router();
 router.get("/user/:userId", verifyTokenOptional, getUserPosts);
 router.get("/feed", verifyTokenOptional, getFeedPosts);
+router.get("/trending-tags", verifyTokenOptional, getTrendingTags);
+router.get("/bookmarks", createVerifyToken("user"), getBookmarkedPosts);
 router.get('/:postId', verifyTokenOptional, getPost);
 router.get('/:postId/comments', verifyTokenOptional, getPostComments);
 router.get('/comment/:commentId/replies', verifyTokenOptional, getCommentReplies);

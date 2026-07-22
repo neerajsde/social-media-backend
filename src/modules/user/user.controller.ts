@@ -1263,3 +1263,44 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
     user: publicProfile,
   });
 });
+
+export const getSuggestedUsers = asyncHandler(async (req, res) => {
+  const currentUserId = req.session?.userId;
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 4);
+
+  let excludeIds: string[] = [];
+  if (currentUserId) {
+    const following = await prisma.follow.findMany({
+      where: { followerId: currentUserId },
+      select: { followingId: true },
+    });
+    excludeIds = [currentUserId, ...following.map((f: any) => f.followingId)];
+  }
+
+  const suggestedUsers = await prisma.user.findMany({
+    where: {
+      status: "active",
+      id: { notIn: excludeIds },
+    },
+    take: limit,
+    orderBy: {
+      followers: {
+        _count: "desc",
+      },
+    },
+    select: {
+      id: true,
+      username: true,
+      first_name: true,
+      last_name: true,
+      avatarUrl: true,
+      isVerified: true,
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Suggested users fetched successfully",
+    users: suggestedUsers,
+  });
+});

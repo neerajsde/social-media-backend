@@ -18,6 +18,7 @@ import {
   getFollowing,
   isFollowing,
   publicUserProfile,
+  getSuggestedUsers,
 } from "./user.controller.js";
 import { createVerifyToken, verifyTokenOptional } from "../../middlewares/auth.js";
 import {
@@ -33,6 +34,7 @@ import {
 const router = express.Router();
 
 router.get("/profile/:username", verifyTokenOptional, publicUserProfile);
+router.get("/suggested", verifyTokenOptional, getSuggestedUsers);
 router.use(createVerifyToken("user"));
 
 /**
