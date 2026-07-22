@@ -10,6 +10,28 @@ export const emailQueue = new Queue("email-worker", {connection});
 
 export const bulkEmailQueue = new Queue("bulk-email-worker", {connection});
 
-export const NotificationQueue = new Queue("notification-worker", {connection});
+export const NotificationQueue = new Queue("notification-worker", {
+    connection,
+    defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+            type: 'exponential',
+            delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: false,
+    }
+});
 
-export const bulkNotificationQueue = new Queue("bulk-notification-worker", {connection});
+export const bulkNotificationQueue = new Queue("bulk-notification-worker", {
+    connection,
+    defaultJobOptions: {
+        attempts: 2,
+        backoff: {
+            type: 'exponential',
+            delay: 5000,
+        },
+        removeOnComplete: true,
+        removeOnFail: false,
+    }
+});

@@ -31,6 +31,16 @@ export const getConversations = asyncHandler(async (req, res) => {
         orderBy: { createdAt: "desc" },
         take: 1,
       },
+      _count: {
+        select: {
+          messages: {
+            where: {
+              isRead: false,
+              senderId: { not: userId },
+            },
+          },
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -41,7 +51,7 @@ export const getConversations = asyncHandler(async (req, res) => {
       participants: conv.participants.map((p) => p.user),
       lastMessage: conv.messages[0] || null,
       updatedAt: conv.updatedAt,
-      unreadCount: 0, // Mock for now
+      unreadCount: conv._count.messages,
     };
   });
 
@@ -116,4 +126,54 @@ export const sendMessage = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({ success: true, data: message });
+});
+// GET /chat/unread-count
+export const getUnreadCount = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) throw new ApiError(401, "Unauthorized");
+
+  const unreadCount = await prisma.message.count({
+    where: {
+      isRead: false,
+      senderId: { not: userId },
+      conversation: {
+        participants: {
+          some: { userId },
+        },
+      },
+    },
+  });
+
+  res.status(200).json({ success: true, count: unreadCount });
+});
+
+// PUT /chat/:conversationId/read
+export const markAsRead = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const { conversationId } = req.params;
+
+  if (!userId) throw new ApiError(401, "Unauthorized");
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { participants: true },
+  });
+
+  if (!conversation || !conversation.participants.some((p) => p.userId === userId)) {
+    throw new ApiError(403, "Not part of this conversation");
+  }
+
+  // Update all unread messages in this conversation where sender is NOT the current user
+  const result = await prisma.message.updateMany({
+    where: {
+      conversationId,
+      isRead: false,
+      senderId: { not: userId },
+    },
+    data: {
+      isRead: true,
+    },
+  });
+
+  res.status(200).json({ success: true, count: result.count });
 });

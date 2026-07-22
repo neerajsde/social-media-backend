@@ -2,7 +2,8 @@ import axios from "axios";
 import { asyncHandler } from "../../utils/async-handler.js";
 import { ApiError } from "../../utils/api-error.js";
 import { prisma } from "../../config/prisma.config.js";
-import { redisClient, REDIS_KEYS } from "../../config/redis.config.js";
+import { redisClient, REDIS_KEYS, deleteByPattern } from "../../config/redis.config.js";
+import { NotificationQueue } from "../../queues/messaging.queue.js";
 import { generateOTP, verifyOTP, generateToken } from "../../utils/core.js";
 import {
   getClientIp,
@@ -1013,6 +1014,12 @@ export const followUser = asyncHandler(async (req, res) => {
 
   await redisClient.del(REDIS_KEYS.userdata(followingId));
   await redisClient.del(REDIS_KEYS.userdata(followerId));
+
+  await NotificationQueue.add("Notification", {
+    userId: followingId,
+    actorId: followerId,
+    type: "follow",
+  });
 
   return res.status(200).json({
     success: true,

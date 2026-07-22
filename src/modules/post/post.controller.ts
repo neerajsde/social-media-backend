@@ -1,7 +1,7 @@
 import { asyncHandler } from "../../utils/async-handler.js";
 import { ApiError } from "../../utils/api-error.js";
 import { prisma } from "../../config/prisma.config.js";
-import { bulkNotificationQueue } from "../../queues/messaging.queue.js";
+import { bulkNotificationQueue, NotificationQueue } from "../../queues/messaging.queue.js";
 import {
   deleteFile,
   deleteFiles,
@@ -325,6 +325,34 @@ export const createPost = asyncHandler(async (req, res) => {
       })),
       skipDuplicates: true,
     });
+  }
+
+  if (post && post.content) {
+    const mentionRegex = /@([a-zA-Z0-9_]{3,30})/g;
+    const mentions = Array.from(post.content.matchAll(mentionRegex)).map((m) => m[1]);
+    
+    if (mentions.length > 0) {
+      const mentionedUsers = await prisma.user.findMany({
+        where: { username: { in: mentions } },
+        select: { id: true }
+      });
+      
+      const mentionJobs = mentionedUsers
+        .filter((u) => u.id !== userId)
+        .map((u) => ({
+          name: "Notification",
+          data: {
+            userId: u.id,
+            actorId: userId,
+            type: "mention",
+            postId: post.id,
+          }
+        }));
+
+      if (mentionJobs.length > 0) {
+        await NotificationQueue.addBulk(mentionJobs);
+      }
+    }
   }
 
   // notify to all followers
