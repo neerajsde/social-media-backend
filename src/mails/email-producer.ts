@@ -52,7 +52,7 @@ export function sendLoginOtp({ email, otp }: SendOtpEmailProps) {
 export function sendRegisterOTP({ email, otp }: SendOtpEmailProps) {
     return sendMail({
         template: "signup.ejs",
-        subject: "Verify Your Social Media Account",
+        subject: "Verify Your ReelTube Account",
         email,
         data: {
             appName: ENV.APP_NAME,
@@ -130,7 +130,7 @@ export function sendChangeEmailOtp({ email, otp }: SendOtpEmailProps) {
 export function sendChangePasswordOtp({ email, otp }: SendOtpEmailProps) {
     return sendMail({
         template: "change-password.ejs",
-        subject: "Reset Your Social Media Password",
+        subject: "Reset Your ReelTube Password",
         email,
         data: {
             appName: ENV.APP_NAME,

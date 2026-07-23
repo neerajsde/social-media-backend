@@ -24,7 +24,7 @@ const router = express.Router();
  *     description: |
  *       User profile management endpoints.
  *       - View and update profile information
- *       - Manage social media links
+ *       - Manage ReelTube links
  *       - Change email and password with verification
  *   - name: "2FA"
  *     description: |

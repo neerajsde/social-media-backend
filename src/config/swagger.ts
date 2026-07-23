@@ -5,12 +5,12 @@ const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "Social Media APP API",
+      title: "ReelTube APP API",
       version: "1.0.0",
-      description: "Complete REST API documentation for Social Media APP - A social media platform with secure authentication and user management",
+      description: "Complete REST API documentation for ReelTube APP - A ReelTube platform with secure authentication and user management",
       contact: {
-        name: "Social Media Team",
-        url: "https://Social Media.ae",
+        name: "ReelTube Team",
+        url: "https://ReelTube.ae",
       },
     },
     servers: [

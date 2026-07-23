@@ -1,8 +1,8 @@
-# 🌟 Social Media Backend
+# 🌟 ReelTube Backend
 
 <div align="center">
 
-  **An Enterprise-Grade, High-Performance Social Media Infrastructure**
+  **An Enterprise-Grade, High-Performance Social Media & OTT Infrastructure**
 
   [![NodeJS](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -20,7 +20,7 @@
 
 ## 📖 Introduction
 
-This repository contains the backend for a modern, high-performance social media platform. Designed with **scalability**, **security**, and **real-time engagement** in mind, it leverages a modular architecture and cutting-edge technologies to handle rich media, massive user interactions, and complex business logic.
+This repository contains the backend for **ReelTube**, a modern, high-performance social media and OTT platform. Designed with **scalability**, **security**, and **real-time engagement** in mind, it leverages a modular architecture and cutting-edge technologies to handle rich media, massive user interactions, short-form videos (Reels), and complex business logic.
 
 ### 💡 The Problem It Solves
 

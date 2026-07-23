@@ -108,6 +108,11 @@ export const userProfile = asyncHandler(async (req, res) => {
           socialInstagram: true,
         },
       },
+      totp: {
+        select: {
+          enabled: true,
+        },
+      },
     },
   });
 
@@ -466,7 +471,7 @@ export const updateSocialMedia = asyncHandler(async (req, res) => {
     socialLinkedin === undefined &&
     socialInstagram === undefined
   ) {
-    throw new ApiError(400, "No/invalid social media fields provided for update");
+    throw new ApiError(400, "No/invalid ReelTube fields provided for update");
   }
 
   if (!userId) {
@@ -496,7 +501,7 @@ export const updateSocialMedia = asyncHandler(async (req, res) => {
 
   return res.status(200).json({
     success: true,
-    message: "User social media links updated successfully",
+    message: "User ReelTube links updated successfully",
   });
 });
 

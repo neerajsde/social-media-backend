@@ -806,6 +806,7 @@ export const verify2FAOTP = asyncHandler(async (req, res) => {
   ]);
 
   await redisClient.del(verifyLimiter);
+  await redisClient.del(REDIS_KEYS.userdata(userOTP.userId));
 
   const user = await prisma.user.findUnique({
     where: { id: userOTP.userId },
@@ -851,6 +852,9 @@ export const disableOTPbasedLogin = asyncHandler(async (req, res) => {
     where: { userId },
     data: { enabled: false },
   });
+
+  await redisClient.del(REDIS_KEYS.userdata(userId));
+
   res.status(200).json({
     success: true,
     message: "OTP-based login disabled successfully",
