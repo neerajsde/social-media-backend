@@ -35,7 +35,7 @@ export async function generateUploadURL(
   filename: string | null = null
 ): Promise<{ url: string; key: string, contentType: string }> {
   const ext = contentType.split("/")[1] ?? "bin";
-  const fileKey = filename ? `${filename}.${ext}` : `${uuidv4()}.${ext}`;
+  const fileKey = (filename ? `${filename}.${ext}` : `${uuidv4()}.${ext}`).replace(/\\/g, '/');
 
   const command = new PutObjectCommand({
     Bucket: bucket,

@@ -1,4 +1,4 @@
-name: Social Media Backend Deploy
+name: ReelTube Backend Deploy
 
 on:
   push:

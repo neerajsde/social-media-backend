@@ -10,7 +10,7 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
 
-  APP_NAME: z.string().default("Social Media"),
+  APP_NAME: z.string().default("ReelTube"),
   API_VERSION: z.string().default("1.0.0"),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),
@@ -49,11 +49,7 @@ const envSchema = z.object({
   LOGO_URL: z.string(),
   SUPPORT_EMAIL: z.string(),
 
-  BACKEND_URL: z.url(),
-  MODERATION_API_URL: z.url(),
-
-  TRINITY_BACKEND_IP: z.string(),
-  TRINITY_NETWORK_AUTH_KEY: z.string(),
+  BACKEND_URL: z.url()
 });
 
 export const ENV = envSchema.parse(process.env);

@@ -74,6 +74,17 @@ export const initSocket = (server: HTTPServer) => {
         console.error("Error parsing realtime_notification message", err);
       }
     });
+
+    redisSubscriber.subscribe("video_progress", (message) => {
+      try {
+        const payload = JSON.parse(message);
+        if (payload.postId) {
+          io.to(`post_${payload.postId}`).emit("video_progress", payload);
+        }
+      } catch (err) {
+        console.error("Error parsing video_progress message", err);
+      }
+    });
   }).catch(err => console.error("Redis Subscriber connection failed", err));
 
   io.on("connection", async (socket: AuthenticatedSocket) => {
@@ -95,6 +106,14 @@ export const initSocket = (server: HTTPServer) => {
       console.log(
         `User ${socket.user?.id} joined conversation ${conversationId}`,
       );
+    });
+
+    /**
+     * JOIN POST ROOM (for tracking progress)
+     */
+    socket.on("join_post_room", (postId: string) => {
+      socket.join(`post_${postId}`);
+      console.log(`User ${socket.user?.id} joined post room post_${postId}`);
     });
 
     /**

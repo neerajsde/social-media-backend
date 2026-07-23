@@ -4,7 +4,7 @@ import { searchQueue } from "../../queues/search.queue.js";
 import { ApiError } from "../../utils/api-error.js";
 
 // Helper for sending generic results based on DB queries
-const searchUsers = async (query: string, page: number, limit: number) => {
+const searchUsers = async (query: string, page: number, limit: number, currentUserId?: string) => {
   const skip = (page - 1) * limit;
 
   const users = await prisma.user.findMany({
@@ -29,7 +29,30 @@ const searchUsers = async (query: string, page: number, limit: number) => {
     take: limit,
   });
 
-  return users;
+  const followingSet = new Set<string>();
+  const followerSet = new Set<string>();
+
+  if (currentUserId && users.length > 0) {
+    const userIds = users.map((u) => u.id);
+    const [myFollowings, myFollowers] = await Promise.all([
+      prisma.follow.findMany({
+        where: { followerId: currentUserId, followingId: { in: userIds } },
+        select: { followingId: true },
+      }),
+      prisma.follow.findMany({
+        where: { followerId: { in: userIds }, followingId: currentUserId },
+        select: { followerId: true },
+      }),
+    ]);
+    myFollowings.forEach((f) => followingSet.add(f.followingId));
+    myFollowers.forEach((f) => followerSet.add(f.followerId));
+  }
+
+  return users.map((u) => ({
+    ...u,
+    isFollowing: followingSet.has(u.id),
+    followsYou: followerSet.has(u.id),
+  }));
 };
 
 const searchTags = async (query: string, page: number, limit: number) => {
@@ -257,11 +280,11 @@ export const executeSearch = async ({
       if (normalizedQuery === "default") {
         results = await searchExploreFeed(page, limit);
       } else {
-        results = await searchUsers(query, page, limit);
+        results = await searchUsers(query, page, limit, userId);
       }
       break;
     case "account":
-      results = await searchUsers(query, page, limit);
+      results = await searchUsers(query, page, limit, userId);
       break;
     case "tags":
       results = await searchTags(query, page, limit);
@@ -273,7 +296,7 @@ export const executeSearch = async ({
       results = await getTrendingSearches(limit);
       break;
     default:
-      results = await searchUsers(query, page, limit);
+      results = await searchUsers(query, page, limit, userId);
   }
 
   // Push event to BullMQ if it's a real query string

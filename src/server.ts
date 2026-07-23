@@ -23,7 +23,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     api: {
-      name: "Social Media Backend API",
+      name: "ReelTube Backend API",
       version: ENV.API_VERSION,
       status: "running"
     },
@@ -35,7 +35,7 @@ app.get("/", (req, res) => {
       documentation: "/docs",
       health_check: "/health",
     },
-    message: "🚀 Welcome to the Social Media Backend API",
+    message: "🚀 Welcome to the ReelTube Backend API",
     timestamp: formattedDate
   });
 });
@@ -46,7 +46,7 @@ app.get("/health", (req, res) => {
 
   res.status(200).json({
     status: "ok",
-    service: "Social Media Backend API",
+    service: "ReelTube Backend API",
     version: ENV.API_VERSION,
     uptime: `${Math.floor(uptime)} seconds`,
     timestamp: new Date().toISOString(),

@@ -401,9 +401,9 @@ router.put("/profile/banner", updateBannerUrl);
  * @swagger
  * /api/v1/user/social-links:
  *   put:
- *     summary: Update social media links
+ *     summary: Update ReelTube links
  *     description: |
- *       Update the user's social media profile links and website URL.
+ *       Update the user's ReelTube profile links and website URL.
  *       At least one field must be provided for the update.
  *     tags: [User]
  *     security:
@@ -448,7 +448,7 @@ router.put("/profile/banner", updateBannerUrl);
  *                 message:
  *                   type: string
  *       400:
- *         description: No social media fields provided or invalid input
+ *         description: No ReelTube fields provided or invalid input
  *       401:
  *         description: Unauthorized - missing or invalid token
  */

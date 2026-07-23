@@ -10,9 +10,16 @@ import {
 } from "../../services/aws.js";
 import { getClientIp } from "../auth/auth.service.js";
 import { verifyFileKey, verifyFileKeys } from "./post.services.js";
-import { addScanVideoJob } from "../../queues/video.queue.js";
+import { addVideoJob } from "../../queues/video.queue.js";
 import { redisClient, REDIS_KEYS, deleteByPattern } from "../../config/redis.config.js";
-import type { Prisma } from "../../generated/prisma/client.js";
+import { Prisma } from "../../generated/prisma/client.js";
+import { ENV } from "../../config/env.js";
+
+const getCdnUrl = (key: string | null | undefined) => {
+  if (!key) return null;
+  if (key.startsWith("http")) return key;
+  return `${ENV.AWS_CDN_URL}/${key}`;
+};
 
 
 export const generatePresignedUrl = asyncHandler(async (req, res) => {
@@ -201,11 +208,6 @@ export const createPost = asyncHandler(async (req, res) => {
   } else if (postType === "video") {
     const { content, mediaUrl, thumbnailUrl } = req.body;
 
-    const isVerified = await verifyFileKey(userId, mediaUrl, ip);
-    if (!isVerified) {
-      throw new ApiError(400, "Invaild Video");
-    }
-
     post = await prisma.$transaction(async (tx) => {
       const post = await tx.post.create({
         data: {
@@ -239,7 +241,7 @@ export const createPost = asyncHandler(async (req, res) => {
       return post;
     });
 
-    await addScanVideoJob({
+    await addVideoJob({
       key: mediaUrl,
       postId: post.id
     });
@@ -292,7 +294,7 @@ export const createPost = asyncHandler(async (req, res) => {
       return post;
     });
 
-    await addScanVideoJob({
+    await addVideoJob({
       key: mediaUrl,
       postId: post.id,
     });
@@ -329,7 +331,7 @@ export const createPost = asyncHandler(async (req, res) => {
 
   if (post && post.content) {
     const mentionRegex = /@([a-zA-Z0-9_]{3,30})/g;
-    const mentions = Array.from(post.content.matchAll(mentionRegex)).map((m) => m[1]);
+    const mentions = Array.from(post.content.matchAll(mentionRegex)).map((m) => m[1] as string);
     
     if (mentions.length > 0) {
       const mentionedUsers = await prisma.user.findMany({
@@ -355,15 +357,18 @@ export const createPost = asyncHandler(async (req, res) => {
     }
   }
 
-  // notify to all followers
-  await bulkNotificationQueue.add("Post-Notification", {
-    postId: post.id,
-    userId: userId,
-  });
+  if (postType !== "video" && postType !== "reel") {
+    // notify to all followers
+    await bulkNotificationQueue.add("Post-Notification", {
+      postId: post.id,
+      userId: userId,
+    });
+  }
 
   return res.status(200).json({
     success: true,
     message: "New post created.",
+    postId: post.id,
   });
 });
 
@@ -1507,8 +1512,12 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const queryType = req.query.type as string;
-  const feedType =
-    userId && queryType === "following" ? "following" : queryType === "trending" ? "trending" : "foryou";
+
+  let feedType = "foryou";
+  if (queryType === "reels") feedType = "reels";
+  else if (userId && queryType === "following") feedType = "following";
+  else if (queryType === "trending") feedType = "trending";
+
   const skip = (page - 1) * limit;
 
   // ── Follow graph ──────────────────────────────────────────────────
@@ -1522,6 +1531,14 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const followingIds = following.map((f) => f.followingId);
   const followingSet = new Set(followingIds);
   const authorIds: string[] = userId ? [...followingIds, userId] : [];
+
+  const followers = userId
+    ? await prisma.follow.findMany({
+        where: { followingId: userId },
+        select: { followerId: true },
+      })
+    : [];
+  const followerSet = new Set(followers.map((f) => f.followerId));
 
   // ── Post select ───────────────────────────────────────────────────
   const postSelect = {
@@ -1597,9 +1614,21 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 
   type FeedPostRow = Prisma.PostGetPayload<{ select: typeof feedPostSelect }>;
 
-  const baseWhere = {
-    status: "active" as const,
+  const baseWhere: Prisma.PostWhereInput = {
+    status: "active",
     isReply: false,
+    ...(feedType === "reels" 
+      ? {
+          postType: { in: ["reel", "video"] },
+          video: { status: "COMPLETED" },
+        }
+      : {
+          OR: [
+            { postType: { in: ["text", "image", "repost"] } },
+            { video: { status: "COMPLETED" } },
+          ],
+        }
+    ),
   };
 
   let merged: FeedPostRow[];
@@ -1655,19 +1684,45 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 
     const randomIdsQuery = userId
       ? prisma.$queryRaw<{ id: string }[]>`
-          SELECT id FROM "Post"
-          WHERE status = 'active'
-            AND visibility = 'public'
-            AND "isReply" = false
-            AND "userId" != ${userId}
+          SELECT "Post".id FROM "Post"
+          WHERE "Post".status = 'active'
+            AND "Post".visibility = 'public'
+            AND "Post"."isReply" = false
+            AND "Post"."userId" != ${userId}
+            ${
+              feedType === "reels"
+                ? Prisma.sql`
+                    AND "Post"."postType" IN ('reel', 'video')
+                    AND EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                  `
+                : Prisma.sql`
+                    AND (
+                      "Post"."postType" IN ('text', 'image', 'repost')
+                      OR EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                    )
+                  `
+            }
           ORDER BY RANDOM()
           LIMIT ${sliceLimit}
         `
       : prisma.$queryRaw<{ id: string }[]>`
-          SELECT id FROM "Post"
-          WHERE status = 'active'
-            AND visibility = 'public'
-            AND "isReply" = false
+          SELECT "Post".id FROM "Post"
+          WHERE "Post".status = 'active'
+            AND "Post".visibility = 'public'
+            AND "Post"."isReply" = false
+            ${
+              feedType === "reels"
+                ? Prisma.sql`
+                    AND "Post"."postType" IN ('reel', 'video')
+                    AND EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                  `
+                : Prisma.sql`
+                    AND (
+                      "Post"."postType" IN ('text', 'image', 'repost')
+                      OR EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                    )
+                  `
+            }
           ORDER BY RANDOM()
           LIMIT ${sliceLimit}
         `;
@@ -1736,7 +1791,15 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       isReposted: post.replies ? post.replies.length > 0 : false,
       isOwnPost: Boolean(userId && post.userId === userId),
       isFollowingAuthor: followingSet.has(post.userId),
+      followsYouAuthor: followerSet.has(post.userId),
       hashtags: post.hashtags.map((h: { hashtag: { tag: string } }) => h.hashtag.tag),
+      video: post.video ? {
+        ...post.video,
+        hlsMasterKey: getCdnUrl(post.video.hlsMasterKey),
+        originalVideo: getCdnUrl(post.video.originalVideo),
+        thumbnail: getCdnUrl(post.video.thumbnail),
+      } : undefined,
+      images: post.images ? post.images.map(getCdnUrl) : undefined,
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
@@ -1887,6 +1950,8 @@ export const getPost = asyncHandler(async (req, res) => {
     throw new ApiError(403, "You need to follow the user to view this post");
   }
 
+
+
   const normalizePost = (p: any) => {
     if (!p) return null;
     return {
@@ -1900,6 +1965,13 @@ export const getPost = asyncHandler(async (req, res) => {
       isOwnPost: p.userId === userId,
       isFollowingAuthor: p.userId === post.userId ? isFollowingAuthor : false,
       hashtags: p.hashtags?.map((h: any) => h.hashtag.tag) || [],
+      video: p.video ? {
+        ...p.video,
+        hlsMasterKey: getCdnUrl(p.video.hlsMasterKey),
+        originalVideo: getCdnUrl(p.video.originalVideo),
+        thumbnail: getCdnUrl(p.video.thumbnail),
+      } : undefined,
+      images: p.images ? p.images.map(getCdnUrl) : undefined,
       parentPost: undefined,
       likes: undefined,
       bookmarks: undefined,
@@ -2143,6 +2215,10 @@ export const getUserPosts = asyncHandler(async (req, res) => {
         status: "active",
         isReply: false,
         ...(visibilityCondition && { visibility: visibilityCondition }),
+        OR: [
+          { postType: { in: ["text", "image", "repost"] } },
+          { video: { status: "COMPLETED" } },
+        ],
       },
       orderBy: { createdAt: "desc" },
       skip,
@@ -2155,18 +2231,31 @@ export const getUserPosts = asyncHandler(async (req, res) => {
         status: "active",
         isReply: false,
         ...(visibilityCondition && { visibility: visibilityCondition }),
+        OR: [
+          { postType: { in: ["text", "image", "repost"] } },
+          { video: { status: "COMPLETED" } },
+        ],
       },
     }),
   ]);
 
   const followingSet = new Set<string>();
+  const followerSet = new Set<string>();
   if (currentUserId) {
     const following = await prisma.follow.findMany({
       where: { followerId: currentUserId },
       select: { followingId: true },
     });
     for (const f of following) followingSet.add(f.followingId);
+
+    const followers = await prisma.follow.findMany({
+      where: { followingId: currentUserId },
+      select: { followerId: true },
+    });
+    for (const f of followers) followerSet.add(f.followerId);
   }
+
+
 
   const normalizePost = (post: any): any => {
     if (!post) return null;
@@ -2178,7 +2267,15 @@ export const getUserPosts = asyncHandler(async (req, res) => {
       isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
       isOwnPost: currentUserId ? post.userId === currentUserId : false,
       isFollowingAuthor: currentUserId ? followingSet.has(post.userId) : false,
+      followsYouAuthor: currentUserId ? followerSet.has(post.userId) : false,
       hashtags: post.hashtags.map((h: any) => h.hashtag.tag),
+      video: post.video ? {
+        ...post.video,
+        hlsMasterKey: getCdnUrl(post.video.hlsMasterKey),
+        originalVideo: getCdnUrl(post.video.originalVideo),
+        thumbnail: getCdnUrl(post.video.thumbnail),
+      } : undefined,
+      images: post.images ? post.images.map(getCdnUrl) : undefined,
       parentPost: post.parentPost ? normalizePost(post.parentPost) : undefined,
     };
   };
@@ -2290,6 +2387,14 @@ export const getBookmarkedPosts = asyncHandler(async (req, res) => {
   });
   const followingSet = new Set(following.map((f: any) => f.followingId));
 
+  const followers = await prisma.follow.findMany({
+    where: { followingId: userId },
+    select: { followerId: true },
+  });
+  const followerSet = new Set(followers.map((f: any) => f.followerId));
+
+
+
   const normalizePost = (post: any): any => {
     if (!post) return null;
     return {
@@ -2300,14 +2405,22 @@ export const getBookmarkedPosts = asyncHandler(async (req, res) => {
       isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
       isOwnPost: post.userId === userId,
       isFollowingAuthor: followingSet.has(post.userId),
+      followsYouAuthor: followerSet.has(post.userId),
       hashtags: post.hashtags ? post.hashtags.map((h: any) => h.hashtag?.tag).filter(Boolean) : [],
+      video: post.video ? {
+        ...post.video,
+        hlsMasterKey: getCdnUrl(post.video.hlsMasterKey),
+        originalVideo: getCdnUrl(post.video.originalVideo),
+        thumbnail: getCdnUrl(post.video.thumbnail),
+      } : undefined,
+      images: post.images ? post.images.map(getCdnUrl) : undefined,
       parentPost: post.parentPost ? normalizePost(post.parentPost) : undefined,
     };
   };
 
   const formattedPosts = bookmarks
     .map((bookmark: any) => bookmark.post)
-    .filter((post: any) => post?.status === "active")
+    .filter((post: any) => post?.status === "active" && (["text", "image", "repost"].includes(post.postType) || post.video?.status === "COMPLETED"))
     .map(normalizePost);
 
   res.status(200).json({

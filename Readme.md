@@ -1,8 +1,8 @@
-# 🌟 Social Media Backend
+# 🌟 ReelTube Backend
 
 <div align="center">
 
-  **An Enterprise-Grade, High-Performance Social Media Infrastructure**
+  **An Enterprise-Grade, High-Performance ReelTube & OTT Infrastructure**
 
   [![NodeJS](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -20,11 +20,11 @@
 
 ## 📖 Introduction
 
-This repository contains the backend for a modern, high-performance social media platform. Designed with **scalability**, **security**, and **real-time engagement** in mind, it leverages a modular architecture and cutting-edge technologies to handle rich media, massive user interactions, and complex business logic.
+This repository contains the backend for **ReelTube**, a modern, high-performance ReelTube and OTT platform. Designed with **scalability**, **security**, and **real-time engagement** in mind, it leverages a modular architecture and cutting-edge technologies to handle rich media, massive user interactions, short-form videos (Reels), and complex business logic.
 
 ### 💡 The Problem It Solves
 
-Building a modern social media platform introduces significant engineering challenges, particularly around media handling, real-time data flow, and robust security. This backend architecture solves several critical problems:
+Building a modern ReelTube platform introduces significant engineering challenges, particularly around media handling, real-time data flow, and robust security. This backend architecture solves several critical problems:
 - **Synchronous Bottlenecks in Media Processing**: Offloads heavy video transcoding (converting to HLS adaptive streaming format) and image optimization to isolated background workers via BullMQ and Redis, keeping the main API highly responsive.
 - **Real-Time Scalability**: Facilitates instantaneous communication (messaging, live presence, real-time notifications) for concurrent users efficiently using Socket.io.
 - **Session Hijacking & Insecure Access**: Implements an enterprise-grade zero-trust session model, encompassing device-fingerprinting, IP tracking, precise refresh token rotation, and robust Two-Factor Authentication (2FA).

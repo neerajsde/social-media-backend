@@ -93,8 +93,9 @@ export async function transcodeToHLS(
     const qDir = path.join(outDir, q.name);
     await fs.mkdir(qDir, { recursive: true });
 
-    const segPattern = path.join(qDir, "seg%03d.ts");
-    const playlist   = path.join(qDir, "playlist.m3u8");
+    // Use forward slashes for ffmpeg to prevent backslashes in the m3u8 playlist
+    const segPattern = path.join(qDir, "seg%03d.ts").replace(/\\/g, "/");
+    const playlist   = path.join(qDir, "playlist.m3u8").replace(/\\/g, "/");
 
     await new Promise<void>((resolve, reject) => {
       ffmpeg(input)

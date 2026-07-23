@@ -1,4 +1,4 @@
-name: Social Media Backend CI
+name: ReelTube Backend CI
 
 on:
   pull_request:
