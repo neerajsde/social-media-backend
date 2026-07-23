@@ -73,7 +73,7 @@ export const markAsRead = async (
 ): Promise<void> => {
   try {
     const userId = req.session?.userId;
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     if (!userId) {
       res.status(401).json({ success: false, message: "Unauthorized" });
