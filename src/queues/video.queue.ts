@@ -27,28 +27,6 @@ function backoffDelay(attemptsMade: number): number {
   return Math.min(base * Math.pow(2, attemptsMade - 1) + jitter, 300_000);
 }
 
-// ─────────────────────────────────────────────────────────────
-// SCAN queue
-// Fast jobs — 4 attempts, short backoff
-// ─────────────────────────────────────────────────────────────
-export const scanVideoQueue = new Queue("scan-video", {
-  connection,
-  defaultJobOptions: {
-    attempts: 4,
-    backoff: {
-      type: "custom", // handled in worker opts below
-    },
-    removeOnComplete: { count: 100 },   // keep last 100 for audit
-    removeOnFail: { count: 500 },       // keep last 500 failed for debugging
-  },
-});
-
-export const addScanVideoJob = async (data: Data) => {
-  await scanVideoQueue.add("scan-video", data, {
-    jobId: `scan-${data.postId}`,        // idempotent — won't double-queue
-  });
-  console.log(`[Queue] scan job added for postId=${data.postId}`);
-};
 
 // ─────────────────────────────────────────────────────────────
 // PROCESS queue
@@ -73,20 +51,22 @@ export const addVideoJob = async (data: Data) => {
   console.log(`[Queue] process job added for postId=${data.postId}`);
 };
 
+import { redisClient } from "../config/redis.config.js";
+
 // ─────────────────────────────────────────────────────────────
 // Queue event listeners — log every retry and final failure
 // Attach once at startup (not per-job)
 // ─────────────────────────────────────────────────────────────
 export function attachQueueEvents() {
-  const scanEvents    = new QueueEvents("scan-video",       { connection });
   const processEvents = new QueueEvents("video-processing", { connection });
 
   for (const [events, name] of [
-    [scanEvents,    "scan-video"],
     [processEvents, "video-processing"],
   ] as const) {
     events.on("failed", ({ jobId, failedReason }) => {
       console.error(`[${name}] job ${jobId} FAILED: ${failedReason}`);
+      const postId = jobId.replace("process-", "");
+      redisClient.publish(`video_progress`, JSON.stringify({ postId, progress: -1, status: "failed" })).catch(console.error);
     });
 
     events.on("retries-exhausted", ({ jobId }) => {
@@ -100,6 +80,16 @@ export function attachQueueEvents() {
 
     events.on("stalled", ({ jobId }) => {
       console.warn(`[${name}] job ${jobId} stalled — worker may have crashed`);
+    });
+
+    events.on("progress", ({ jobId, data }) => {
+      const postId = jobId.replace("process-", "");
+      redisClient.publish(`video_progress`, JSON.stringify({ postId, progress: data, status: "processing" })).catch(console.error);
+    });
+
+    events.on("completed", ({ jobId }) => {
+      const postId = jobId.replace("process-", "");
+      redisClient.publish(`video_progress`, JSON.stringify({ postId, progress: 100, status: "completed" })).catch(console.error);
     });
   }
 }

@@ -5,7 +5,7 @@ import os from "os";
 import { Redis } from "ioredis";
 import { ENV } from "../config/env.js";
 import { downloadVideo } from "../services/video/download.service.js";
-import { convertToRekognitionFormat, scanVideoUnsafe } from "../services/video/moderation.service.js";
+
 import {
   transcodeToHLS,
   generateThumbnail,
@@ -16,8 +16,8 @@ import {
 import { uploadToS3 } from "../services/s3.service.js";
 import { deleteFile } from "../services/aws.js";
 import { prisma } from "../config/prisma.config.js";
-import { addVideoJob, backoffDelay, attachQueueEvents } from "../queues/video.queue.js";
-import { sendContentReport } from "../mails/email-producer.js";
+import { backoffDelay, attachQueueEvents } from "../queues/video.queue.js";
+import { bulkNotificationQueue } from "../queues/messaging.queue.js";
 
 const CPU_COUNT = os.cpus().length;
 const TMP_DIR   = "/tmp";
@@ -67,6 +67,17 @@ async function safeDelete(target?: string) {
   } catch (_) {}
 }
 
+function normalizeS3Path(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function toS3Key(...parts: string[]): string {
+  return parts
+    .map(part => normalizeS3Path(String(part)))
+    .join('/')
+    .replace(/\/+/g, '/');
+}
+
 // ─────────────────────────────────────────────────────────────
 // Upload entire HLS directory to S3
 // ─────────────────────────────────────────────────────────────
@@ -87,83 +98,19 @@ async function uploadHLSDirectory(hlsDir: string, s3Prefix: string): Promise<str
   await Promise.all(
     allFiles.map(async (absPath) => {
       const rel      = path.relative(hlsDir, absPath);
-      const s3Key    = `${s3Prefix}/${rel}`;
+      const s3Key    = toS3Key(s3Prefix, rel);
       const mimeType = absPath.endsWith(".m3u8")
         ? "application/vnd.apple.mpegurl"
         : "video/mp2t";
+        
+      console.log(`Uploading HLS file:\n${s3Key}`);
       await uploadToS3(absPath, s3Key, mimeType);
     })
   );
 
-  return `${s3Prefix}/index.m3u8`;
+  return toS3Key(s3Prefix, "index.m3u8");
 }
 
-// ─────────────────────────────────────────────────────────────
-// SCAN worker
-// ─────────────────────────────────────────────────────────────
-async function scanVideo(job: Job) {
-  const { key, postId } = job.data;
-
-  console.log(`[scan] attempt ${job.attemptsMade + 1} for postId=${postId}`);
-
-  try {
-    await prisma.video.update({
-      where: { postId },
-      data: { status: "SCANNING" },
-    });
-
-    const unsafe = await scanVideoUnsafe(key);
-
-    if (unsafe) {
-      const post = await prisma.$transaction(async (tx) => {
-        const post = await tx.post.findUnique({
-          where: { id: postId },
-          include: {
-            user: { select: { first_name: true, username: true, email: true } },
-          },
-        });
-        await tx.video.delete({ where: { postId } });
-        await tx.post.update({ where: { id: postId }, data: { status: "deleted" } });
-        return post;
-      });
-
-      await deleteFile(key);
-
-      if (post) {
-        await sendContentReport({
-          email: post.user.email,
-          name: post.user.first_name || `@${post.user.username}`,
-          caption: post.content || "No caption",
-        });
-      }
-      return;
-    }
-
-    await addVideoJob(job.data);
-    await prisma.video.update({
-      where: { postId },
-      data: { status: "QUEUED" },
-    });
-
-  } catch (err: any) {
-    const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 4);
-
-    console.error(
-      `[scan] error on attempt ${job.attemptsMade + 1} for postId=${postId}: ${err.message}`
-    );
-
-    if (isLastAttempt) {
-      await prisma.video.update({
-        where: { postId },
-        data: { status: "FAILED" },
-      }).catch(() => {});
-
-      console.error(`[scan] all retries exhausted for postId=${postId}`);
-    }
-
-    classifyError(err);
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 // PROCESS worker
@@ -187,7 +134,7 @@ async function processVideo(job: Job) {
     });
 
     downloadedPath = await downloadVideo(key);
-    inputPath      = await convertToRekognitionFormat(downloadedPath);
+    inputPath      = downloadedPath;
 
     const isValid = await validateVideo(inputPath);
     if (!isValid) throw new Error("Invalid/corrupted video file");
@@ -241,6 +188,18 @@ async function processVideo(job: Job) {
       },
     });
 
+    const videoPost = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    });
+
+    if (videoPost) {
+      await bulkNotificationQueue.add("Post-Notification", {
+        postId: postId,
+        userId: videoPost.userId,
+      });
+    }
+
     job.updateProgress(100);
     return { success: true, masterKey };
 
@@ -270,22 +229,7 @@ async function processVideo(job: Job) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Workers
-// ─────────────────────────────────────────────────────────────
-new Worker("scan-video", scanVideo, {
-  connection: connection as any,
-  concurrency: Math.max(1, Math.floor(CPU_COUNT / 2)),
 
-  limiter: { max: 5, duration: 1000 },
-
-  stalledInterval: 30_000,
-  maxStalledCount: 2,
-
-  settings: {
-    backoffStrategy: backoffDelay,
-  },
-});
 
 new Worker("video-processing", processVideo, {
   connection: connection as any,
