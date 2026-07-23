@@ -315,10 +315,20 @@ export const registerStep2 = asyncHandler(
       redisClient.del(REDIS_KEYS.usernameAvailability(newUser.username)),
     ]);
 
+    const device = getDeviceInfo(req);
+    const { accessToken, refreshToken } = await actualLogin(
+      newUser.id,
+      newUser.email,
+      device,
+      ip,
+    );
+
     res.status(201).json({
       success: true,
       message: "User Registered Successfully",
       user: userWithoutPassword,
+      accessToken,
+      refreshToken,
     });
   },
 );
