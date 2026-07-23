@@ -7,7 +7,7 @@ import { sendPostNotify } from "../mails/email-producer.js";
 import { NotificationQueue } from "../queues/messaging.queue.js";
 import { redisClient } from "../config/redis.config.js";
 import { emailQueue } from "../queues/messaging.queue.js";
-import type { NotificationType } from "@prisma/client";
+import type { NotificationType } from "../generated/prisma/enums.js";
 
 interface NotificationJobData {
   userId: string;
@@ -39,9 +39,9 @@ async function notification(job: Job<NotificationJobData>) {
         userId,
         actorId,
         type,
-        postId,
-        commentId,
-        messageId,
+        postId: postId || null,
+        commentId: commentId || null,
+        messageId: messageId || null,
       },
       include: {
         actor: {

@@ -61,7 +61,7 @@ export const getConversations = asyncHandler(async (req, res) => {
 // GET /chat/:conversationId/messages
 export const getMessages = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
-  const { conversationId } = req.params;
+  const conversationId = req.params.conversationId as string;
   if (!userId) throw new ApiError(401, "Unauthorized");
 
   const conversation = await prisma.conversation.findUnique({
@@ -150,7 +150,7 @@ export const getUnreadCount = asyncHandler(async (req, res) => {
 // PUT /chat/:conversationId/read
 export const markAsRead = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
-  const { conversationId } = req.params;
+  const conversationId = req.params.conversationId as string;
 
   if (!userId) throw new ApiError(401, "Unauthorized");
 
