@@ -1081,6 +1081,8 @@ export const getFollowers = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Unautherized");
   }
 
+  const currentUserId = req.session?.userId;
+
   const [followers, totalCount] = await prisma.$transaction([
     prisma.follow.findMany({
       where: { followingId: userId },
@@ -1093,6 +1095,9 @@ export const getFollowers = asyncHandler(async (req, res) => {
             id: true,
             username: true,
             avatarUrl: true,
+            first_name: true,
+            last_name: true,
+            isVerified: true,
           },
         },
       },
@@ -1103,7 +1108,30 @@ export const getFollowers = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  const data = followers.map((f: any) => f.follower);
+  let followingSet = new Set();
+  let followerSet = new Set();
+
+  if (currentUserId && followers.length > 0) {
+    const userIds = followers.map((f) => f.follower.id);
+    const [myFollowings, myFollowers] = await Promise.all([
+      prisma.follow.findMany({
+        where: { followerId: currentUserId, followingId: { in: userIds } },
+        select: { followingId: true },
+      }),
+      prisma.follow.findMany({
+        where: { followerId: { in: userIds }, followingId: currentUserId },
+        select: { followerId: true },
+      }),
+    ]);
+    myFollowings.forEach((f) => followingSet.add(f.followingId));
+    myFollowers.forEach((f) => followerSet.add(f.followerId));
+  }
+
+  const data = followers.map((f: any) => ({
+    ...f.follower,
+    isFollowing: followingSet.has(f.follower.id),
+    followsYou: followerSet.has(f.follower.id),
+  }));
 
   res.status(200).json({
     success: true,
@@ -1129,6 +1157,8 @@ export const getFollowing = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Unautherized");
   }
 
+  const currentUserId = req.session?.userId;
+
   const [followings, totalCount] = await prisma.$transaction([
     prisma.follow.findMany({
       where: { followerId: userId },
@@ -1141,6 +1171,9 @@ export const getFollowing = asyncHandler(async (req, res) => {
             id: true,
             username: true,
             avatarUrl: true,
+            first_name: true,
+            last_name: true,
+            isVerified: true,
           },
         },
       },
@@ -1151,7 +1184,30 @@ export const getFollowing = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  const data = followings.map((f: any) => f.following);
+  let followingSet = new Set();
+  let followerSet = new Set();
+
+  if (currentUserId && followings.length > 0) {
+    const userIds = followings.map((f) => f.following.id);
+    const [myFollowings, myFollowers] = await Promise.all([
+      prisma.follow.findMany({
+        where: { followerId: currentUserId, followingId: { in: userIds } },
+        select: { followingId: true },
+      }),
+      prisma.follow.findMany({
+        where: { followerId: { in: userIds }, followingId: currentUserId },
+        select: { followerId: true },
+      }),
+    ]);
+    myFollowings.forEach((f) => followingSet.add(f.followingId));
+    myFollowers.forEach((f) => followerSet.add(f.followerId));
+  }
+
+  const data = followings.map((f: any) => ({
+    ...f.following,
+    isFollowing: followingSet.has(f.following.id),
+    followsYou: followerSet.has(f.following.id),
+  }));
 
   res.status(200).json({
     success: true,
@@ -1223,7 +1279,7 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const [followerCount, followingCount, isFollowingRelation, postCount] = await prisma.$transaction(async (tx) => {
+  const [followerCount, followingCount, isFollowingRelation, followsYouRelation, postCount] = await prisma.$transaction(async (tx) => {
     return Promise.all([
       tx.follow.count({
         where: { followingId: user.id },
@@ -1234,6 +1290,11 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
       currentUserId
         ? tx.follow.findFirst({
             where: { followerId: currentUserId, followingId: user.id },
+          })
+        : Promise.resolve(null),
+      currentUserId
+        ? tx.follow.findFirst({
+            where: { followerId: user.id, followingId: currentUserId },
           })
         : Promise.resolve(null),
       tx.post.count({
@@ -1262,6 +1323,7 @@ export const publicUserProfile = asyncHandler(async (req, res) => {
     followingCount: followingCount,
     postCount,
     isFollowing: !!isFollowingRelation,
+    followsYou: !!followsYouRelation,
   };
 
   return res.status(200).json({
@@ -1305,9 +1367,23 @@ export const getSuggestedUsers = asyncHandler(async (req, res) => {
     },
   });
 
+  const followerSet = new Set<string>();
+  if (currentUserId && suggestedUsers.length > 0) {
+    const suggestedUsersIds = suggestedUsers.map((u) => u.id);
+    const followers = await prisma.follow.findMany({
+      where: { followingId: currentUserId, followerId: { in: suggestedUsersIds } },
+    });
+    for (const f of followers) followerSet.add(f.followerId);
+  }
+
+  const usersWithFollowsYou = suggestedUsers.map((u) => ({
+    ...u,
+    followsYou: followerSet.has(u.id),
+  }));
+
   res.status(200).json({
     success: true,
     message: "Suggested users fetched successfully",
-    users: suggestedUsers,
+    users: usersWithFollowsYou,
   });
 });

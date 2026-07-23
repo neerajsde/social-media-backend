@@ -1532,6 +1532,14 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const followingSet = new Set(followingIds);
   const authorIds: string[] = userId ? [...followingIds, userId] : [];
 
+  const followers = userId
+    ? await prisma.follow.findMany({
+        where: { followingId: userId },
+        select: { followerId: true },
+      })
+    : [];
+  const followerSet = new Set(followers.map((f) => f.followerId));
+
   // ── Post select ───────────────────────────────────────────────────
   const postSelect = {
     id: true,
@@ -1676,21 +1684,45 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 
     const randomIdsQuery = userId
       ? prisma.$queryRaw<{ id: string }[]>`
-          SELECT id FROM "Post"
-          WHERE status = 'active'
-            AND visibility = 'public'
-            AND "isReply" = false
-            AND "userId" != ${userId}
-            ${feedType === "reels" ? Prisma.sql`AND "postType" IN ('reel', 'video')` : Prisma.empty}
+          SELECT "Post".id FROM "Post"
+          WHERE "Post".status = 'active'
+            AND "Post".visibility = 'public'
+            AND "Post"."isReply" = false
+            AND "Post"."userId" != ${userId}
+            ${
+              feedType === "reels"
+                ? Prisma.sql`
+                    AND "Post"."postType" IN ('reel', 'video')
+                    AND EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                  `
+                : Prisma.sql`
+                    AND (
+                      "Post"."postType" IN ('text', 'image', 'repost')
+                      OR EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                    )
+                  `
+            }
           ORDER BY RANDOM()
           LIMIT ${sliceLimit}
         `
       : prisma.$queryRaw<{ id: string }[]>`
-          SELECT id FROM "Post"
-          WHERE status = 'active'
-            AND visibility = 'public'
-            AND "isReply" = false
-            ${feedType === "reels" ? Prisma.sql`AND "postType" IN ('reel', 'video')` : Prisma.empty}
+          SELECT "Post".id FROM "Post"
+          WHERE "Post".status = 'active'
+            AND "Post".visibility = 'public'
+            AND "Post"."isReply" = false
+            ${
+              feedType === "reels"
+                ? Prisma.sql`
+                    AND "Post"."postType" IN ('reel', 'video')
+                    AND EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                  `
+                : Prisma.sql`
+                    AND (
+                      "Post"."postType" IN ('text', 'image', 'repost')
+                      OR EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
+                    )
+                  `
+            }
           ORDER BY RANDOM()
           LIMIT ${sliceLimit}
         `;
@@ -1759,6 +1791,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
       isReposted: post.replies ? post.replies.length > 0 : false,
       isOwnPost: Boolean(userId && post.userId === userId),
       isFollowingAuthor: followingSet.has(post.userId),
+      followsYouAuthor: followerSet.has(post.userId),
       hashtags: post.hashtags.map((h: { hashtag: { tag: string } }) => h.hashtag.tag),
       video: post.video ? {
         ...post.video,
@@ -2207,12 +2240,19 @@ export const getUserPosts = asyncHandler(async (req, res) => {
   ]);
 
   const followingSet = new Set<string>();
+  const followerSet = new Set<string>();
   if (currentUserId) {
     const following = await prisma.follow.findMany({
       where: { followerId: currentUserId },
       select: { followingId: true },
     });
     for (const f of following) followingSet.add(f.followingId);
+
+    const followers = await prisma.follow.findMany({
+      where: { followingId: currentUserId },
+      select: { followerId: true },
+    });
+    for (const f of followers) followerSet.add(f.followerId);
   }
 
 
@@ -2227,6 +2267,7 @@ export const getUserPosts = asyncHandler(async (req, res) => {
       isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
       isOwnPost: currentUserId ? post.userId === currentUserId : false,
       isFollowingAuthor: currentUserId ? followingSet.has(post.userId) : false,
+      followsYouAuthor: currentUserId ? followerSet.has(post.userId) : false,
       hashtags: post.hashtags.map((h: any) => h.hashtag.tag),
       video: post.video ? {
         ...post.video,
@@ -2346,6 +2387,12 @@ export const getBookmarkedPosts = asyncHandler(async (req, res) => {
   });
   const followingSet = new Set(following.map((f: any) => f.followingId));
 
+  const followers = await prisma.follow.findMany({
+    where: { followingId: userId },
+    select: { followerId: true },
+  });
+  const followerSet = new Set(followers.map((f: any) => f.followerId));
+
 
 
   const normalizePost = (post: any): any => {
@@ -2358,6 +2405,7 @@ export const getBookmarkedPosts = asyncHandler(async (req, res) => {
       isBookmarked: post.bookmarks ? post.bookmarks.length > 0 : false,
       isOwnPost: post.userId === userId,
       isFollowingAuthor: followingSet.has(post.userId),
+      followsYouAuthor: followerSet.has(post.userId),
       hashtags: post.hashtags ? post.hashtags.map((h: any) => h.hashtag?.tag).filter(Boolean) : [],
       video: post.video ? {
         ...post.video,
