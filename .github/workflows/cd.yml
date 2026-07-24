@@ -24,6 +24,9 @@ jobs:
             nvm install 20
             nvm use 20
 
+            sudo systemctl restart postgresql
+            npx prisma migrate deploy
+
             git pull origin main
             npm install
             npx prisma generate
