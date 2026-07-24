@@ -7,12 +7,11 @@ import { ENV } from "../config/env.js";
 import { downloadVideo } from "../services/video/download.service.js";
 
 import {
-  transcodeToHLS,
   generateThumbnail,
   getVideoDuration,
   validateVideo,
-  DEFAULT_QUALITIES,
 } from "../services/video/compress.service.js";
+import { createMediaConvertJob, getMediaConvertJob } from "../services/video/mediaconvert.service.js";
 import { uploadToS3 } from "../services/s3.service.js";
 import { deleteFile } from "../services/aws.js";
 import { prisma } from "../config/prisma.config.js";
@@ -139,8 +138,13 @@ async function processVideo(job: Job) {
     const isValid = await validateVideo(inputPath);
     if (!isValid) throw new Error("Invalid/corrupted video file");
 
+    const emitProgress = (progress: number, statusOverride?: string) => {
+      job.updateProgress(progress).catch(() => {});
+      connection.publish("video_progress", JSON.stringify({ postId, progress, status: statusOverride || "processing" })).catch(() => {});
+    };
+
     const filename = path.parse(inputPath).name;
-    job.updateProgress(10);
+    emitProgress(10);
 
     const video = await prisma.video.findUnique({
       where: { postId },
@@ -158,7 +162,7 @@ async function processVideo(job: Job) {
       });
     }
 
-    job.updateProgress(20);
+    emitProgress(20);
 
     const duration = await getVideoDuration(inputPath);
 
@@ -169,19 +173,50 @@ async function processVideo(job: Job) {
 
     job.updateProgress(25);
 
-    hlsDir = path.join(TMP_DIR, `${filename}_hls`);
-    await transcodeToHLS(inputPath, hlsDir, DEFAULT_QUALITIES, 6, async (percent) => {
-      // Map 0-100 overall transcode percent to the 25-80 range for the overall job
-      const mappedProgress = Math.floor(25 + (percent * 0.55));
-      await job.updateProgress(mappedProgress);
-    }, duration);
-
-    job.updateProgress(80);
-
     const s3Prefix  = `videos/${filename}/hls`;
-    const masterKey = await uploadHLSDirectory(hlsDir, s3Prefix);
+    
+    // Submit job to AWS MediaConvert
+    console.log(`[process] Submitting to AWS MediaConvert: input=${key}, output=${s3Prefix}`);
+    const mcJobId = await createMediaConvertJob(key, s3Prefix);
+    
+    // Polling loop with smooth fake progress
+    let isComplete = false;
+    let fakeProgress = 25;
+    
+    const progressInterval = setInterval(() => {
+      if (fakeProgress < 78) {
+        fakeProgress += 1;
+        emitProgress(fakeProgress);
+      }
+    }, 1500); // Tick 1% every 1.5 seconds
 
-    job.updateProgress(95);
+    try {
+      while (!isComplete) {
+        await new Promise(r => setTimeout(r, 15000)); // Poll AWS every 15s
+        const statusObj = await getMediaConvertJob(mcJobId);
+        
+        const status = statusObj?.Status;
+        if (status === "COMPLETE") {
+          isComplete = true;
+        } else if (status === "ERROR") {
+          throw new Error(`MediaConvert Job Failed: ${statusObj?.ErrorMessage}`);
+        } else if (status === "PROGRESSING") {
+          const percent = statusObj?.JobPercentComplete || 0;
+          const mappedProgress = Math.floor(25 + (percent * 0.55));
+          if (mappedProgress > fakeProgress) {
+            fakeProgress = mappedProgress;
+            emitProgress(fakeProgress);
+          }
+        }
+      }
+    } finally {
+      clearInterval(progressInterval);
+    }
+
+    emitProgress(80);
+    const masterKey = `${s3Prefix}/index.m3u8`;
+
+    emitProgress(95);
 
     await prisma.video.update({
       where: { postId },
@@ -204,7 +239,7 @@ async function processVideo(job: Job) {
       });
     }
 
-    job.updateProgress(100);
+    emitProgress(100, "completed");
     return { success: true, masterKey };
 
   } catch (err: any) {
@@ -237,7 +272,7 @@ async function processVideo(job: Job) {
 
 new Worker("video-processing", processVideo, {
   connection: connection as any,
-  concurrency: Math.max(1, Math.floor(CPU_COUNT / 2)),
+  concurrency: 10,
 
   limiter: { max: 5, duration: 1000 },
 

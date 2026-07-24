@@ -22,6 +22,8 @@ const envSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string(),
   AWS_REGION: z.string(),
   S3_BUCKET_NAME: z.string(),
+  AWS_MEDIACONVERT_ENDPOINT: z.string().optional(),
+  AWS_MEDIACONVERT_ROLE_ARN: z.string().optional(),
   CLOUDFRONT_DISTRIBUTION_ID: z.string(),
   AWS_CDN_URL: z.string(),
 
