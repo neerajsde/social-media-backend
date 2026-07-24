@@ -9,10 +9,11 @@ import { redisClient } from "../config/redis.config.js";
 import { SOCKET_KEYS } from "../constants/redisKeys.js";
 
 interface JwtPayload {
-  id: string;
+  id: string;        // The actual userId — resolved from sessionId
+  sessionId: string; // The session record ID
+  role?: string;
   email?: string;
   socket_id?: string;
-  sessionId: string;
 }
 
 interface MessageData {
@@ -37,7 +38,7 @@ export const initSocket = (server: HTTPServer) => {
     },
   });
 
-  io.use((socket: AuthenticatedSocket, next) => {
+  io.use(async (socket: AuthenticatedSocket, next) => {
     try {
       let token = socket.handshake.auth?.token;
 
@@ -48,13 +49,28 @@ export const initSocket = (server: HTTPServer) => {
 
       if (!token) return next(new Error("Unauthorized"));
 
-      const decoded = jwt.verify(token, ENV.JWT_ACCESS_SECRET) as JwtPayload;
+      const decoded = jwt.verify(token, ENV.JWT_ACCESS_SECRET) as { sessionId: string; role: string };
 
-      decoded.socket_id = socket.id;
-      socket.user = decoded;
+      // Look up the real userId from the session record
+      const session = await prisma.userSession.findUnique({
+        where: { id: decoded.sessionId },
+        select: { userId: true },
+      });
+
+      if (!session) {
+        return next(new Error("Session not found"));
+      }
+
+      socket.user = {
+        id: session.userId,
+        sessionId: decoded.sessionId,
+        role: decoded.role,
+        socket_id: socket.id,
+      };
 
       next();
-    } catch {
+    } catch (err) {
+      console.error("Socket auth error:", err);
       next(new Error("Invalid Token"));
     }
   });
@@ -85,16 +101,52 @@ export const initSocket = (server: HTTPServer) => {
         console.error("Error parsing video_progress message", err);
       }
     });
+
+    redisSubscriber.subscribe("realtime_chat", (message) => {
+      try {
+        const payload = JSON.parse(message);
+        if (payload.userId) {
+          io.to(payload.userId).emit("new_message", payload);
+        }
+      } catch (err) {
+        console.error("Error parsing realtime_chat message", err);
+      }
+    });
+
+    redisSubscriber.subscribe("presence_change", (message) => {
+      try {
+        const payload = JSON.parse(message);
+        if (payload.targetUserId) {
+          io.to(payload.targetUserId).emit("presence_change", payload);
+        }
+      } catch (err) {
+        console.error("Error parsing presence_change message", err);
+      }
+    });
+
+    redisSubscriber.subscribe("realtime_chat_typing", (message) => {
+      try {
+        const payload = JSON.parse(message);
+        if (payload.targetUserId) {
+          io.to(payload.targetUserId).emit("typing_status", payload);
+        }
+      } catch (err) {
+        console.error("Error parsing realtime_chat_typing message", err);
+      }
+    });
   }).catch(err => console.error("Redis Subscriber connection failed", err));
 
   io.on("connection", async (socket: AuthenticatedSocket) => {
-    console.log("User connected:", socket.user?.socket_id);
+    const userId = socket.user?.id;
+    console.log(`✅ Socket connected | userId: ${userId} | socketId: ${socket.id}`);
     await saveConnection(socket);
 
     // Join user to their personal room for direct messages and notifications
-    if (socket.user?.id) {
-      socket.join(socket.user.id);
-      console.log(`User ${socket.user.id} joined personal room`);
+    if (userId) {
+      socket.join(userId);
+      console.log(`📥 User ${userId} joined personal room`);
+    } else {
+      console.warn("⚠️ Socket connected but userId is undefined");
     }
 
     /**
@@ -133,6 +185,30 @@ export const initSocket = (server: HTTPServer) => {
     });
 
     /**
+     * TYPING STATUS
+     */
+    socket.on("typing", async (data: { conversationId: string; receiverId: string }) => {
+      if (!userId || !data.receiverId) return;
+      console.log(`✏️ Typing: ${userId} → ${data.receiverId}`);
+      await redisClient.publish("realtime_chat_typing", JSON.stringify({
+        targetUserId: data.receiverId,
+        conversationId: data.conversationId,
+        senderId: userId,
+        isTyping: true
+      }));
+    });
+
+    socket.on("stop_typing", async (data: { conversationId: string; receiverId: string }) => {
+      if (!userId || !data.receiverId) return;
+      await redisClient.publish("realtime_chat_typing", JSON.stringify({
+        targetUserId: data.receiverId,
+        conversationId: data.conversationId,
+        senderId: userId,
+        isTyping: false
+      }));
+    });
+
+    /**
      * DISCONNECT
      */
     socket.on("disconnect", async () => {
@@ -163,8 +239,27 @@ async function getSessionOwner(
     if (userSession.user.presence !== newPresence) {
       await prisma.user.update({
         where: { id: userSession.userId },
-        data: { presence: newPresence },
+        data: { presence: newPresence, lastSeenAt: new Date() },
       });
+
+      // Broadcast presence change to users with active conversations
+      const conversations = await prisma.conversation.findMany({
+        where: { participants: { some: { userId: userSession.userId } } },
+        include: { participants: true }
+      });
+      const userIdsToNotify = new Set<string>();
+      conversations.forEach(c => c.participants.forEach(p => {
+        if (p.userId !== userSession.userId) userIdsToNotify.add(p.userId);
+      }));
+      
+      for (const id of userIdsToNotify) {
+        await redisClient.publish("presence_change", JSON.stringify({ 
+          targetUserId: id, 
+          userId: userSession.userId, 
+          presence: newPresence,
+          lastSeenAt: new Date().toISOString()
+        }));
+      }
     }
 
     return userSession.userId;

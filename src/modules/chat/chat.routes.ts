@@ -1,5 +1,5 @@
 import express from "express";
-import { getConversations, getMessages, sendMessage, getUnreadCount, markAsRead } from "./chat.controller.js";
+import { getConversations, getMessages, sendMessage, getUnreadCount, markAsRead, clearChat, generateChatPresignedUrl } from "./chat.controller.js";
 import { createVerifyToken } from "../../middlewares/auth.js";
 
 const router = express.Router();
@@ -10,6 +10,8 @@ router.get("/conversations", getConversations);
 router.get("/unread-count", getUnreadCount);
 router.get("/:conversationId/messages", getMessages);
 router.put("/:conversationId/read", markAsRead);
+router.delete('/:conversationId/clear', clearChat);
 router.post("/message", sendMessage);
+router.post("/upload-url", generateChatPresignedUrl);
 
 export default router;
