@@ -2,6 +2,9 @@ import { asyncHandler } from "../../utils/async-handler.js";
 import { ApiError } from "../../utils/api-error.js";
 import { prisma } from "../../config/prisma.config.js";
 import { redisClient } from "../../config/redis.config.js";
+import { generateUploadURL } from "../../services/aws.js";
+import { getClientIp } from "../auth/auth.service.js";
+import { ENV } from "../../config/env.js";
 
 // GET /chat/conversations
 export const getConversations = asyncHandler(async (req, res) => {
@@ -92,11 +95,40 @@ export const getMessages = asyncHandler(async (req, res) => {
 // POST /chat/message
 export const sendMessage = asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
-  const { receiverId, content, sharedPostId } = req.body;
+  const { receiverId, content, sharedPostId, fileKey, mediaType } = req.body;
   
   if (!userId) throw new ApiError(401, "Unauthorized");
   if (!receiverId) throw new ApiError(400, "Receiver id is required");
-  if (!content && !sharedPostId) throw new ApiError(400, "Message content or shared post is required");
+  if (!content && !sharedPostId && !fileKey) throw new ApiError(400, "Message content, shared post, or media is required");
+
+  let mediaUrl: string | null = null;
+  const ip = getClientIp(req);
+
+  if (fileKey && typeof fileKey === "string") {
+    // Validate the fileKey with AwsUploads
+    const upload = await prisma.awsUploads.findFirst({
+      where: { fileKey, userId },
+    });
+
+    if (!upload) {
+      throw new ApiError(400, "Invalid file key");
+    }
+
+    if (upload.ipAddress !== ip) {
+      throw new ApiError(400, "Invalid session for file upload");
+    }
+
+    if (upload.status !== "CREATED") {
+      throw new ApiError(409, `File is already ${upload.status}`);
+    }
+
+    const maxAgeMs = 10 * 60 * 1000;
+    if (Date.now() - upload.createdAt.getTime() > maxAgeMs) {
+      throw new ApiError(400, "Upload link expired");
+    }
+
+    mediaUrl = `${ENV.AWS_CDN_URL}/${fileKey}`;
+  }
 
   // Find existing conversation between the two users
   let conversation = await prisma.conversation.findFirst({
@@ -124,13 +156,32 @@ export const sendMessage = asyncHandler(async (req, res) => {
     });
   }
 
-  const message = await prisma.message.create({
-    data: {
-      conversationId: conversation.id,
-      senderId: userId,
-      content,
-      sharedPostId,
-    },
+  const message = await prisma.$transaction(async (tx) => {
+    const newMessage = await tx.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: userId,
+        content,
+        sharedPostId,
+        mediaUrl,
+        mediaType,
+      },
+    });
+
+    if (fileKey) {
+      await tx.awsUploads.updateMany({
+        where: {
+          fileKey: fileKey,
+          userId,
+          ipAddress: ip,
+        },
+        data: {
+          status: "USED",
+        },
+      });
+    }
+
+    return newMessage;
   });
 
   // Publish to Redis for WebSocket realtime delivery
@@ -140,6 +191,53 @@ export const sendMessage = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json({ success: true, data: message });
+});
+
+// POST /chat/upload-url
+export const generateChatPresignedUrl = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const { mimeType } = req.body;
+
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  if (!mimeType) {
+    throw new ApiError(400, "mimeType is required");
+  }
+
+  const allowedMimeTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "application/pdf",
+  ];
+
+  if (!allowedMimeTypes.includes(mimeType)) {
+    throw new ApiError(400, "Unsupported file type");
+  }
+
+  const { url, key } = await generateUploadURL(mimeType);
+  const ip = getClientIp(req);
+  
+  await prisma.awsUploads.create({
+    data: {
+      userId,
+      mimeType,
+      fileKey: key,
+      uploadUrl: url,
+      ipAddress: ip,
+    },
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Presigned URL generated",
+    uploadUrl: url,
+    fileKey: key,
+  });
 });
 // GET /chat/unread-count
 export const getUnreadCount = asyncHandler(async (req, res) => {
