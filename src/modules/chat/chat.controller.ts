@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../utils/async-handler.js";
 import { ApiError } from "../../utils/api-error.js";
 import { prisma } from "../../config/prisma.config.js";
+import { redisClient } from "../../config/redis.config.js";
 
 // GET /chat/conversations
 export const getConversations = asyncHandler(async (req, res) => {
@@ -23,6 +24,8 @@ export const getConversations = asyncHandler(async (req, res) => {
               first_name: true,
               last_name: true,
               avatarUrl: true,
+              presence: true,
+              lastSeenAt: true,
             },
           },
         },
@@ -73,8 +76,13 @@ export const getMessages = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Not part of this conversation");
   }
 
+  const participant = conversation.participants.find(p => p.userId === userId);
+
   const messages = await prisma.message.findMany({
-    where: { conversationId },
+    where: { 
+      conversationId,
+      ...(participant?.clearedAt ? { createdAt: { gt: participant.clearedAt } } : {})
+    },
     orderBy: { createdAt: "asc" },
   });
 
@@ -124,6 +132,12 @@ export const sendMessage = asyncHandler(async (req, res) => {
       sharedPostId,
     },
   });
+
+  // Publish to Redis for WebSocket realtime delivery
+  await redisClient.publish(
+    "realtime_chat",
+    JSON.stringify({ userId: receiverId, message })
+  );
 
   res.status(201).json({ success: true, data: message });
 });
@@ -176,4 +190,36 @@ export const markAsRead = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json({ success: true, count: result.count });
+});
+
+// DELETE /chat/:conversationId/clear
+export const clearChat = asyncHandler(async (req, res) => {
+  const userId = req.session?.userId;
+  const conversationId = req.params.conversationId as string;
+
+  if (!userId) throw new ApiError(401, "Unauthorized");
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { participants: true },
+  });
+
+  if (!conversation || !conversation.participants.some((p) => p.userId === userId)) {
+    throw new ApiError(403, "Not part of this conversation");
+  }
+
+  // Update the participant's clearedAt timestamp
+  await prisma.participant.update({
+    where: {
+      conversationId_userId: {
+        conversationId,
+        userId,
+      },
+    },
+    data: {
+      clearedAt: new Date(),
+    },
+  });
+
+  res.status(200).json({ success: true, message: "Chat cleared successfully" });
 });
