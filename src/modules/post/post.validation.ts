@@ -16,7 +16,7 @@ const presignedUrlSchema = z.object({
 });
 
 const basePostFields = {
-  content: z.string().max(1000, "Maximum 1000 characters").optional(),
+  content: z.string().max(5000, "Maximum 5000 characters").optional(),
 
   tags: z
     .array(
@@ -33,7 +33,7 @@ const postSchema = z.discriminatedUnion("postType", [
   z.object({
     postType: z.literal("text"),
     ...basePostFields,
-    content: z.string().max(1000, "Maximum 1000 characters"),
+    content: z.string().max(5000, "Maximum 5000 characters"),
   }),
 
   // Image Post
@@ -66,12 +66,12 @@ const postSchema = z.discriminatedUnion("postType", [
 ]);
 
 const repostFields = uuidSchema.extend({
-  content: z.string().max(1000, "Maximum 1000 characters").optional(),
+  content: z.string().max(5000, "Maximum 5000 characters").optional(),
   visibility: z.enum(["public", "private", "followers"]),
 });
 
 const updatePostFields = uuidSchema.extend({
-  content: z.string().max(1000, "Maximum 1000 characters").optional(),
+  content: z.string().max(5000, "Maximum 5000 characters").optional(),
   visibility: z.enum(["public", "private", "followers"]),
   status: z.enum(["active", "archived", "draft"]),
 });

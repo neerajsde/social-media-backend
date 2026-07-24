@@ -76,7 +76,7 @@ router.use(createVerifyToken("user"));
  *               mimeTypes:
  *                 oneOf:
  *                   - type: string
- *                     enum: [video/mp4, video/webm]
+ *                     enum: [video/mp4, video/webm, video/mov, video/quicktime]
  *                     example: video/mp4
  *                   - type: array
  *                     items:

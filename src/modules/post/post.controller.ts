@@ -82,7 +82,7 @@ export const generatePresignedUrl = asyncHandler(async (req, res) => {
       throw new ApiError(400, "mimeType is required");
     }
 
-    const allowedMimeTypes = ["video/mp4", "video/webm", "video/mov"];
+    const allowedMimeTypes = ["video/mp4", "video/webm", "video/mov", "video/quicktime"];
 
     if (!allowedMimeTypes.includes(mimeTypes)) {
       throw new ApiError(400, "Unsupported file type");
@@ -1623,10 +1623,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
           video: { status: "COMPLETED" },
         }
       : {
-          OR: [
-            { postType: { in: ["text", "image", "repost"] } },
-            { video: { status: "COMPLETED" } },
-          ],
+          postType: { in: ["text", "image", "repost"] },
         }
     ),
   };
@@ -1696,10 +1693,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
                     AND EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
                   `
                 : Prisma.sql`
-                    AND (
-                      "Post"."postType" IN ('text', 'image', 'repost')
-                      OR EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
-                    )
+                    AND "Post"."postType" IN ('text', 'image', 'repost')
                   `
             }
           ORDER BY RANDOM()
@@ -1717,10 +1711,7 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
                     AND EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
                   `
                 : Prisma.sql`
-                    AND (
-                      "Post"."postType" IN ('text', 'image', 'repost')
-                      OR EXISTS (SELECT 1 FROM "Video" WHERE "Video"."postId" = "Post".id AND "Video".status = 'COMPLETED'::"ProcessStatus")
-                    )
+                    AND "Post"."postType" IN ('text', 'image', 'repost')
                   `
             }
           ORDER BY RANDOM()
