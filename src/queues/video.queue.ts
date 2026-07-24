@@ -84,7 +84,8 @@ export function attachQueueEvents() {
 
     events.on("progress", ({ jobId, data }) => {
       const postId = jobId.replace("process-", "");
-      redisClient.publish(`video_progress`, JSON.stringify({ postId, progress: data, status: "processing" })).catch(console.error);
+      const status = data === 100 ? "completed" : "processing";
+      redisClient.publish(`video_progress`, JSON.stringify({ postId, progress: data, status })).catch(console.error);
     });
 
     events.on("completed", ({ jobId }) => {

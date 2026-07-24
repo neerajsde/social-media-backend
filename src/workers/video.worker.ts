@@ -170,7 +170,11 @@ async function processVideo(job: Job) {
     job.updateProgress(25);
 
     hlsDir = path.join(TMP_DIR, `${filename}_hls`);
-    await transcodeToHLS(inputPath, hlsDir, DEFAULT_QUALITIES, 6);
+    await transcodeToHLS(inputPath, hlsDir, DEFAULT_QUALITIES, 6, async (percent) => {
+      // Map 0-100 overall transcode percent to the 25-80 range for the overall job
+      const mappedProgress = Math.floor(25 + (percent * 0.55));
+      await job.updateProgress(mappedProgress);
+    }, duration);
 
     job.updateProgress(80);
 

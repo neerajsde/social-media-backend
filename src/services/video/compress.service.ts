@@ -82,11 +82,17 @@ export async function transcodeToHLS(
   input: string,
   outDir: string,
   qualities: HlsQuality[] = DEFAULT_QUALITIES,
-  segmentDuration = 6 // seconds — 6 s is the Apple-recommended default
+  segmentDuration = 6, // seconds — 6 s is the Apple-recommended default
+  onProgress?: (percent: number) => void,
+  durationSec?: number
 ): Promise<string> {
   await validateInput(input);
   await waitForFile(input);
   await fs.mkdir(outDir, { recursive: true });
+
+  const totalQualities = qualities.length;
+  let currentQualityIndex = 0;
+  let lastProgressTime = 0;
 
   // Transcode each quality into its own sub-folder
   for (const q of qualities) {
@@ -130,11 +136,39 @@ export async function transcodeToHLS(
           "-hls_segment_filename", segPattern,
         ])
         .on("start", (cmd) => console.log(`🚀 HLS [${q.name}]:`, cmd))
-        .on("stderr", (line) => console.log(`📢 [${q.name}]:`, line))
+        .on("progress", (progress) => {
+          const now = Date.now();
+          if (onProgress && (now - lastProgressTime > 1000)) {
+            let p = progress.percent;
+            
+            // Fallback calculation if percent is missing but we have timemark and duration
+            if ((p === undefined || isNaN(p)) && progress.timemark && durationSec && durationSec > 0) {
+              const timeParts = progress.timemark.split(':');
+              if (timeParts.length === 3) {
+                const hours = parseFloat(timeParts[0]);
+                const mins = parseFloat(timeParts[1]);
+                const secs = parseFloat(timeParts[2]);
+                const currentSec = hours * 3600 + mins * 60 + secs;
+                p = (currentSec / durationSec) * 100;
+              }
+            }
+
+            if (p !== undefined && !isNaN(p)) {
+              // Clamp p between 0 and 100
+              p = Math.max(0, Math.min(100, p));
+              const overallPercent = ((currentQualityIndex * 100) + p) / totalQualities;
+              onProgress(overallPercent);
+              lastProgressTime = now;
+            }
+          }
+        })
+        .on("stderr", (line) => {}) // Mute stderr to avoid huge logs
         .on("end",   () => { console.log(`✅ [${q.name}] done`); resolve(); })
         .on("error", (err) => { console.error(`❌ [${q.name}] error:`, err); reject(err); })
         .save(playlist);
     });
+    
+    currentQualityIndex++;
   }
 
   // Write EXT-X-STREAM-INF master playlist
