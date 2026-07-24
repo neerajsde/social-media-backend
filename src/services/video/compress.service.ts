@@ -114,13 +114,15 @@ export async function transcodeToHLS(
           "-vf",        `scale=${q.width}:-2`,
           "-r",         "30",
           "-c:v",       "libx264",
-          "-preset",    "slow",
+          "-preset",    "fast",
           "-crf",       String(q.crf),
           "-maxrate",   q.maxrate,
           "-bufsize",   q.bufsize,
           "-pix_fmt",   "yuv420p",   // broad device compatibility
           "-profile:v", "high",
           "-level",     "4.1",
+          "-threads",   "1",
+          "-max_muxing_queue_size", "1024",
 
           // Audio
           "-c:a",       "aac",
@@ -145,9 +147,9 @@ export async function transcodeToHLS(
             if ((p === undefined || isNaN(p)) && progress.timemark && durationSec && durationSec > 0) {
               const timeParts = progress.timemark.split(':');
               if (timeParts.length === 3) {
-                const hours = parseFloat(timeParts[0]);
-                const mins = parseFloat(timeParts[1]);
-                const secs = parseFloat(timeParts[2]);
+                const hours = parseFloat(timeParts[0] as string);
+                const mins = parseFloat(timeParts[1] as string);
+                const secs = parseFloat(timeParts[2] as string);
                 const currentSec = hours * 3600 + mins * 60 + secs;
                 p = (currentSec / durationSec) * 100;
               }
